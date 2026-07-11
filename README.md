@@ -70,7 +70,7 @@ The goal is to practice software engineering - not simply generate code.
 
 ## Technology
 
-- C++20
+- C++17
 - Qt 6 Widgets
 - CMake
 - CLion
