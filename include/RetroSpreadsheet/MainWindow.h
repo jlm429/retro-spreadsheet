@@ -11,6 +11,8 @@ class QCloseEvent;
 class QLineEdit;
 class QMenu;
 
+// Provides the spreadsheet shell: menus, toolbars, formula bar, CSV files, and
+// save prompts.
 class MainWindow : public QMainWindow
 {
     Q_OBJECT

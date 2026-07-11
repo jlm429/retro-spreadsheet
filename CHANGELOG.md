@@ -4,6 +4,10 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Removed repository and skill workflow instructions for agent-run
+  `no-mistakes` validation so pull request validation can be run manually.
+- Added repository guidance for monitoring CircleCI on pull requests, and
+  aligned the README technology list with the C++17 project standard.
 - Added CircleCI build and test configuration plus repository workflow guidance
   for build, test, commit, and CI changes.
 - Added agent-neutral behavioral safeguards to the repository guidance and
@@ -14,7 +18,6 @@ All notable project changes should be recorded here as they are made.
   maintenance.
 - Added Qt Test regression coverage for formulas, CSV persistence, dirty state,
   cell range references, and clipboard operations.
-- Added a macOS GitHub Actions CI workflow that builds the app and runs `ctest`.
 - Added dirty workbook tracking, save prompts, recent CSV files, and current
   file names in the window title.
 - Expanded formulas with direct cell references, multiplication, division, and

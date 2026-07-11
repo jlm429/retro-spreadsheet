@@ -3,6 +3,7 @@
 #include <QString>
 #include <vector>
 
+// Evaluates raw worksheet cell values and formulas without depending on UI code.
 class FormulaEvaluator
 {
 public:
@@ -10,6 +11,8 @@ public:
 
     explicit FormulaEvaluator(const Grid &cells);
 
+    // Returns the display value for a cell, including spreadsheet-style error
+    // strings for invalid formulas, references, cycles, and numeric operations.
     QString evaluateCell(int row, int column) const;
 
 private:

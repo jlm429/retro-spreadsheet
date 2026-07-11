@@ -130,6 +130,8 @@ the local result separately from the remote CircleCI result.
 
 The agent may inspect CircleCI results when access is available. It must not
 rerun, cancel, approve, or modify remote pipelines unless explicitly requested.
+After opening a pull request, monitor CircleCI when explicitly requested and
+address safe failures that are directly related to the branch changes.
 
 ## Changelog
 
