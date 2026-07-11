@@ -1,75 +1,67 @@
 # Agent Guidance
 
-`AGENTS.md` is the canonical repository guidance for any coding assistant.
-Assistant-specific files should link here instead of duplicating these rules.
+`AGENTS.md` is the canonical guidance for all coding assistants. Assistant-specific
+files should link here instead of duplicating these rules.
 
 ## Project
 
-Build a modern C++17 desktop spreadsheet application inspired by classic spreadsheet software (e.g., Excel 97). This is an educational software engineering project, not a feature-complete clone.
+Build a modern educational spreadsheet application inspired by classic desktop
+spreadsheets, not a feature-complete clone.
 
-**Stack**
+Stack:
+
 - C++17
 - Qt 6 Widgets
 - CMake
 - CLion
 - macOS
 
----
+## Operating Principles
 
-## Philosophy
-
-Act as a senior software engineer and mentor.
-
-Think before coding. Spend more time understanding the existing codebase than writing new code.
-
-Always prefer:
-- small, incremental improvements
-- clean architecture
-- readable, maintainable code
-- working software after every change
-
-Never generate large amounts of code when a smaller verified step will do.
-
----
+- Act as a senior engineer and mentor.
+- Understand the existing code before changing it.
+- Keep changes small, direct, reviewable, and working after each step.
+- Prefer clean architecture, readable code, and maintainability over cleverness.
+- Implement only what was requested. Do not add speculative features.
+- State assumptions when they affect behavior, design, or scope.
+- Push back when a request would add avoidable complexity or technical debt.
+- Do not use em dashes in prose, code comments, docs, commit messages, or PR text.
+- Do not add an agent name as a commit co-author.
 
 ## Workflow
 
-Before making changes:
+Before changing code:
 
-1. Inspect the current project.
-2. Identify the next logical milestone.
-3. State assumptions when they affect design, behavior, or scope.
-4. Explain the plan if it significantly changes the design.
-5. Define how the change will be verified.
-6. Implement only that milestone.
-7. Build and test.
-8. Fix any issues before continuing.
-9. Add a concise entry to `CHANGELOG.md` for user-visible code, build, or
+1. Check `git status`.
+2. Read the relevant source files and tests.
+3. Identify the next logical milestone.
+4. Define how the change will be verified.
+5. Explain the plan when it changes design or scope.
+
+While changing code:
+
+- Touch only files and lines needed for the task.
+- Match the existing local style.
+- Do not refactor or reformat unrelated code.
+- Do not discard user changes.
+- Remove only code made unused by the change.
+- Mention unrelated defects separately instead of fixing them.
+- For bug fixes, reproduce the issue end to end when feasible before fixing it.
+
+After changing code:
+
+1. Configure and build.
+2. Run the automated tests.
+3. Fix lint, build, test, or flaky failures when encountered.
+4. Review `git diff`.
+5. Confirm only intended files changed.
+6. Report warnings, skipped tests, or unresolved issues.
+7. Add a concise `CHANGELOG.md` entry for user-visible code, build, or
    documentation changes.
 
 Never claim success without verification.
 
-## Build, Test, and Commit Workflow
-
-Agents may edit files within this repository and run the commands needed to
-build and test the project.
-
-Before making changes:
-
-- Read the relevant source files and existing tests.
-- Check `git status`.
-- Do not modify unrelated files.
-- Do not discard existing user changes.
-
-After making changes:
-
-- Configure and build the project.
-- Run the complete automated test suite.
-- Review `git diff`.
-- Confirm that only intended files changed.
-- Report any warnings, skipped tests, or unresolved issues.
-
-Use the repository's documented commands. For the standard CMake workflow:
+Standard local verification:
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
@@ -77,76 +69,51 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-If formatting or static-analysis commands are configured, run them before
-committing.
+Run configured formatting or static analysis before committing when available.
 
-### Commit Rules
+## Commits
 
-An agent may create a local Git commit only when explicitly requested by the
-user.
+Create a local Git commit only when explicitly requested.
 
-Before committing, the agent must:
+Before committing:
 
-- Run the relevant tests.
-- Confirm that the tests pass.
+- Run the relevant tests and confirm they pass.
 - Review the staged diff.
-- Ensure generated build files, credentials, secrets, and temporary files are
-  not staged.
+- Ensure generated build files, secrets, credentials, and temporary files are not
+  staged.
+- Stage specific files, not `git add .`, unless repository status has been
+  reviewed first.
 - Use a concise commit message describing the completed change.
 
-The agent must not:
+Do not push, force-push, amend, rebase, rewrite history, delete branches or tags,
+modify remotes, or bypass failing tests unless explicitly instructed.
 
-- Push commits without explicit user approval.
-- Force-push.
-- Amend an existing commit unless explicitly requested.
-- Rebase or rewrite history without explicit approval.
-- Delete branches or tags.
-- Modify Git remotes.
-- Bypass failing tests.
-- Use `git add .` without first reviewing the repository status.
+## Continuous Integration
 
-Prefer staging specific files:
+Treat `.circleci/config.yml` as production configuration.
 
-```sh
-git add path/to/file1 path/to/file2
-git diff --cached
-git commit -m "Describe the completed change"
-```
-
-### Continuous Integration
-
-Changes to `.circleci/config.yml` must be treated as production configuration
-changes.
-
-Before committing CircleCI configuration:
+Before committing CircleCI changes:
 
 - Validate the configuration when the CircleCI CLI is available.
-- Run the corresponding build and test commands locally.
+- Run the corresponding local build and tests.
 - Review the configuration diff.
-- Do not add tokens, credentials, or other secrets to the repository.
+- Do not add tokens, credentials, or other secrets.
 
-A successful local test run does not guarantee that CircleCI will pass. Report
-the local result separately from the remote CircleCI result.
-
-The agent may inspect CircleCI results when access is available. It must not
-rerun, cancel, approve, or modify remote pipelines unless explicitly requested.
-After opening a pull request, monitor CircleCI when explicitly requested and
-address safe failures that are directly related to the branch changes.
+Local success does not guarantee CircleCI success. Report local and remote results
+separately. Inspect CircleCI only when access is available, and do not rerun,
+cancel, approve, or modify remote pipelines unless explicitly requested.
 
 ## Changelog
 
-Track project changes in `CHANGELOG.md` as they are made.
-
-Do not reorganize historical changelog entries or edit a changelog directory
-unless the current task is specifically to add a new change entry there.
-
----
+Track project changes in `CHANGELOG.md` as they are made. Do not reorganize
+historical entries unless the task specifically asks for changelog cleanup.
 
 ## Architecture
 
-Favor separation of concerns.
+Favor separation of concerns and keep business logic independent of the GUI when
+practical.
 
-Typical classes include:
+Common classes:
 
 - MainWindow
 - SpreadsheetWidget
@@ -157,13 +124,10 @@ Typical classes include:
 - FormulaEvaluator
 - FileManager
 
-Keep business logic independent of the GUI whenever practical.
-
----
-
 ## Coding Style
 
 Prefer:
+
 - RAII
 - smart pointers
 - const correctness
@@ -172,97 +136,37 @@ Prefer:
 - descriptive names
 
 Avoid:
+
 - global state
 - giant classes
 - duplicated logic
 - premature optimization
 - unnecessary abstractions
 
-Optimize for clarity over cleverness.
+## UI Quality
 
----
+For UI changes, be exacting about interaction, layout, copy, spacing,
+responsiveness, accessibility, and visual polish.
 
-## Behavioral Guardrails
+## Security
 
-Use judgment on trivial tasks, but bias toward caution over speed.
+Never read, print, summarize, copy, commit, expose, request, or hardcode `.env`,
+`.env.*`, API keys, tokens, credentials, or service account files. Document
+required secrets only by variable name in `.env.example`.
 
-Before implementing:
+Stop and alert the human reviewer if a secret is exposed.
 
-- Do not assume silently. Surface important tradeoffs and uncertainty.
-- If multiple interpretations are plausible, ask or present the options.
-- Prefer the simplest approach that satisfies the request.
-- Push back when a request would add unnecessary complexity or technical debt.
-
-When editing:
-
-- Touch only lines that directly support the request.
-- Match the existing local style, even when you would choose differently.
-- Do not refactor, reformat, or clean up adjacent code unless required.
-- Do not add speculative features, configurability, or single-use abstractions.
-- Remove only imports, variables, functions, or files made unused by your change.
-- Mention unrelated dead code or defects separately instead of fixing them.
-
-For verification:
-
-- Convert tasks into concrete success criteria.
-- Reproduce bugs before fixing them when feasible.
-- Add or update focused tests when the codebase supports it.
-- Run the relevant build, test, lint, or smoke check before claiming success.
-
----
-
-## Safety
-
-Never read, print, summarize, copy, commit, expose, request, or hardcode
-`.env`, `.env.*`, API keys, tokens, credentials, or service account files.
-Document required secrets only by variable name in `.env.example`.
-
-Always ask before:
+Ask before:
 
 - installing software or dependencies
 - requesting API keys or credentials
 - modifying system configuration
 - deleting files
-- rewriting git history
+- rewriting Git history
 - force pushing
 - making major architectural changes
 
-Prefer proposing a plan before making significant changes.
-
-When uncertain, ask.
-
----
-
-## Collaboration
-
-Treat the user as the lead developer.
-
-Explain important design decisions.
-
-Present reasonable alternatives when tradeoffs exist.
-
-If a request is likely to introduce technical debt, explain why before implementing it.
-
----
-
-## Scope
-
-Implement only what was requested.
-
-Do not add extra features or speculative improvements unless explicitly asked.
-
-Finish the current milestone before moving to the next.
-
-Leave the project in a better state after every change.
-
----
-
 ## Goal
 
-Optimize for:
-
-- maintainability
-- software engineering best practices
-- educational value
-- clean architecture
-- incremental development
+Optimize for maintainability, educational value, clean architecture, and
+incremental development.
