@@ -1,68 +1,45 @@
 ---
 name: excel97-project
-description: Use when developing the Retro Spreadsheet project, including architecture, implementation planning, debugging, refactoring, Qt development, formula evaluation, and software engineering guidance.
+description: Use when developing the Retro Spreadsheet project, including planning, architecture, Qt Widgets implementation, formula evaluation, debugging, refactoring, testing, and code review.
 ---
 
-# Excel97 Project Coach
+# Retro Spreadsheet Project Skill
 
-## Overview
+Use this skill for hands-on work in the Retro Spreadsheet repository.
 
-Guide development of a modern C++ desktop spreadsheet application inspired by classic spreadsheet software.
+Follow `AGENTS.md` as the source of truth for workflow, safety, commits,
+verification, and scope. This skill adds project-specific focus for spreadsheet
+development.
 
-Emphasize incremental engineering, clean architecture, and maintainable code rather than generating large amounts of code at once.
+## Project Focus
 
-Act as a:
+Build a polished educational C++17 and Qt 6 Widgets spreadsheet application
+inspired by classic desktop spreadsheets.
 
-- Senior C++ engineer
-- Qt expert
-- Software architect
-- Code reviewer
-- Project planner
-- Debugging assistant
+Prioritize:
 
----
+- incremental milestones
+- working software after every change
+- clear separation between UI and business logic
+- readable C++ and Qt idioms
+- focused tests for model, formula, file, and UI behavior
 
-## Principles
+Avoid generating broad feature sets in one pass. Plan, implement, compile, test,
+and then continue.
 
-Never generate an entire application in one response.
+## Before Coding
 
-Instead:
+- Inspect the current project structure and relevant `CMakeLists.txt` files.
+- Read the affected source, headers, and tests.
+- Identify the smallest useful milestone.
+- Note compile blockers or architectural constraints.
+- Define the verification command before making changes.
 
-1. Plan
-2. Build one milestone
-3. Compile
-4. Test
-5. Refactor
-6. Continue
+## Architecture Guide
 
-Every milestone should leave the application in a working state.
+Favor Model-View or MVC boundaries.
 
----
-
-## Development Philosophy
-
-Prefer:
-
-- small commits
-- compile often
-- test frequently
-- readable code
-- separation of concerns
-
-Avoid:
-
-- giant generated files
-- unnecessary abstraction
-- speculative optimization
-- implementing features before infrastructure exists
-
----
-
-## Architecture
-
-Favor Model-View or MVC.
-
-Typical classes:
+Core areas:
 
 - MainWindow
 - SpreadsheetWidget
@@ -75,115 +52,43 @@ Typical classes:
 - FileManager
 - UndoManager
 
-Later introduce:
+Introduce supporting systems only when needed by a concrete feature, such as a
+dependency graph, clipboard manager, selection model, or formatting engine.
 
-- DependencyGraph
-- ClipboardManager
-- SelectionModel
-- FormattingEngine
+## Feature Work
 
----
+For significant features, explain:
 
-## Technology
+- purpose
+- affected files
+- architectural impact
+- tradeoffs
+- verification plan
 
-- C++17
-- Qt 6 Widgets
-- CMake
-- CLion
-- Qt Test
-- Git
-- macOS
-
----
-
-## Workflow
-
-Before coding:
-
-- inspect project structure
-- review CMakeLists.txt
-- determine current milestone
-- identify compile blockers
-
-Implement only the next logical milestone.
-
-Always compile before declaring success.
-
-When the user requests `/no-mistakes`, follow the active validation instructions
-available in the session after the local build and tests pass.
-
-## Behavioral Safeguards
-
-Follow the repository-wide behavioral guardrails in `AGENTS.md`.
-
----
-
-## Code Review
-
-Evaluate:
-
-- architecture
-- naming
-- maintainability
-- memory safety
-- Qt best practices
-- performance
-
-Ask:
-
-- Can this be simpler?
-- Would this scale?
-- Would I teach this?
-
----
+Keep UI behavior precise and testable. For formula, persistence, and model logic,
+prefer focused tests before or alongside implementation.
 
 ## Debugging
 
-When compilation fails:
+When compilation or tests fail:
 
-1. Read compiler output.
+1. Read the exact error output.
 2. Identify the root cause.
 3. Make the smallest reasonable correction.
-4. Rebuild.
+4. Rebuild or rerun the failing test.
 
-Never blindly regenerate code.
+Do not regenerate unrelated code to fix local failures.
 
----
+## Review Lens
 
-## Feature Development
+Evaluate changes for:
 
-For every significant feature:
+- maintainability
+- memory safety
+- Qt ownership and signal-slot usage
+- model and UI separation
+- naming clarity
+- test coverage
+- unnecessary complexity
 
-- explain the purpose
-- explain architectural impact
-- identify modified files
-- discuss tradeoffs
-
-Then implement.
-
----
-
-## Teaching
-
-Whenever possible explain:
-
-- why a design was chosen
-- reasonable alternatives
-- engineering tradeoffs
-- common beginner mistakes
-
-Relate implementation decisions to professional software engineering.
-
----
-
-## Goal
-
-Produce a polished educational spreadsheet application that demonstrates:
-
-- object-oriented design
-- Qt GUI programming
-- formula evaluation
-- file I/O
-- testing
-- clean architecture
-- incremental software engineering
+Ask whether the solution is simple enough to teach and strong enough to extend.
