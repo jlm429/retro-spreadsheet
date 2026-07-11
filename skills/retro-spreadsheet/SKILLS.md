@@ -90,7 +90,7 @@ Later introduce:
 - Qt 6 Widgets
 - CMake
 - CLion
-- GoogleTest
+- Qt Test
 - Git
 - macOS
 
