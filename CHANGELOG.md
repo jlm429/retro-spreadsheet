@@ -4,6 +4,8 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Added behavioral safeguards to the project skill guidance for simpler,
+  more targeted, and better verified code changes.
 - Reorganized headers under `include/RetroSpreadsheet/` and added project
   structure docs plus resource directories for future icons and themes.
 - Refactored UI action setup and formula aggregation internals for easier
