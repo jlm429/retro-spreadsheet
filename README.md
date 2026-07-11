@@ -42,7 +42,7 @@ Defines the engineering principles that guide every change in the repository, in
 - coding philosophy
 - architectural guidelines
 - safety rules
-- collaboration practices
+- workflow, commit, CI, and changelog expectations
 
 ### Skills
 
@@ -85,6 +85,13 @@ Configure, build, and run the automated Qt Test suites with:
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
+```
+
+On Debian or Ubuntu Linux, install the build dependencies used by CI before
+configuring:
+
+```sh
+sudo apt-get install -y build-essential cmake ninja-build qt6-base-dev libgl1-mesa-dev
 ```
 
 Run the desktop application after building:

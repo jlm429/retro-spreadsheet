@@ -4,6 +4,7 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Documented Linux build dependencies and refreshed README guidance summary.
 - Added the CircleCI OpenGL development package required for Qt6Gui detection.
 - Condensed and reorganized repository and skill guidance to remove duplicate
   instructions while preserving workflow, safety, and project-specific rules.
