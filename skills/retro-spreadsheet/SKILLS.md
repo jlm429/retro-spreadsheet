@@ -86,7 +86,7 @@ Later introduce:
 
 ## Technology
 
-- C++20
+- C++17
 - Qt 6 Widgets
 - CMake
 - CLion
@@ -111,31 +111,7 @@ Always compile before declaring success.
 
 ## Behavioral Safeguards
 
-Source: User-provided guidance from the July 11, 2026 conversation, described
-as "Behavioral guidelines to reduce common LLM coding mistakes, derived from
-Andrej Karpathy's observations on LLM coding pitfalls."
-
-Before implementing:
-
-- state assumptions explicitly when they affect design, behavior, or scope
-- surface multiple plausible interpretations instead of silently choosing one
-- stop and ask when uncertainty would make the change risky
-- prefer the simplest implementation that satisfies the request
-
-When editing:
-
-- touch only lines that directly support the user's request
-- match the existing local style
-- avoid speculative features, configurability, and single-use abstractions
-- remove only unused code created by the current change
-- mention unrelated issues separately instead of fixing them opportunistically
-
-For verification:
-
-- define concrete success criteria for each task
-- reproduce bugs before fixing them when feasible
-- add or update focused tests when the codebase supports it
-- run the relevant build, test, lint, or smoke check before claiming success
+Follow the repository-wide behavioral guardrails in `AGENTS.md`.
 
 ---
 

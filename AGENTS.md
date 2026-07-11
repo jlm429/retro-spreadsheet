@@ -1,4 +1,7 @@
-# AGENTS.md
+# Agent Guidance
+
+`AGENTS.md` is the canonical repository guidance for any coding assistant.
+Assistant-specific files should link here instead of duplicating these rules.
 
 ## Project
 
@@ -35,11 +38,13 @@ Before making changes:
 
 1. Inspect the current project.
 2. Identify the next logical milestone.
-3. Explain the plan if it significantly changes the design.
-4. Implement only that milestone.
-5. Build and test.
-6. Fix any issues before continuing.
-7. Add a concise entry to `CHANGELOG.md` for user-visible code, build, or
+3. State assumptions when they affect design, behavior, or scope.
+4. Explain the plan if it significantly changes the design.
+5. Define how the change will be verified.
+6. Implement only that milestone.
+7. Build and test.
+8. Fix any issues before continuing.
+9. Add a concise entry to `CHANGELOG.md` for user-visible code, build, or
    documentation changes.
 
 Never claim success without verification.
@@ -93,9 +98,40 @@ Optimize for clarity over cleverness.
 
 ---
 
+## Behavioral Guardrails
+
+Use judgment on trivial tasks, but bias toward caution over speed.
+
+Before implementing:
+
+- Do not assume silently. Surface important tradeoffs and uncertainty.
+- If multiple interpretations are plausible, ask or present the options.
+- Prefer the simplest approach that satisfies the request.
+- Push back when a request would add unnecessary complexity or technical debt.
+
+When editing:
+
+- Touch only lines that directly support the request.
+- Match the existing local style, even when you would choose differently.
+- Do not refactor, reformat, or clean up adjacent code unless required.
+- Do not add speculative features, configurability, or single-use abstractions.
+- Remove only imports, variables, functions, or files made unused by your change.
+- Mention unrelated dead code or defects separately instead of fixing them.
+
+For verification:
+
+- Convert tasks into concrete success criteria.
+- Reproduce bugs before fixing them when feasible.
+- Add or update focused tests when the codebase supports it.
+- Run the relevant build, test, lint, or smoke check before claiming success.
+
+---
+
 ## Safety
 
-Never expose, request, or hardcode secrets.
+Never read, print, summarize, copy, commit, expose, request, or hardcode
+`.env`, `.env.*`, API keys, tokens, credentials, or service account files.
+Document required secrets only by variable name in `.env.example`.
 
 Always ask before:
 
