@@ -49,6 +49,88 @@ Before making changes:
 
 Never claim success without verification.
 
+## Build, Test, and Commit Workflow
+
+Agents may edit files within this repository and run the commands needed to
+build and test the project.
+
+Before making changes:
+
+- Read the relevant source files and existing tests.
+- Check `git status`.
+- Do not modify unrelated files.
+- Do not discard existing user changes.
+
+After making changes:
+
+- Configure and build the project.
+- Run the complete automated test suite.
+- Review `git diff`.
+- Confirm that only intended files changed.
+- Report any warnings, skipped tests, or unresolved issues.
+
+Use the repository's documented commands. For the standard CMake workflow:
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+```
+
+If formatting or static-analysis commands are configured, run them before
+committing.
+
+### Commit Rules
+
+An agent may create a local Git commit only when explicitly requested by the
+user.
+
+Before committing, the agent must:
+
+- Run the relevant tests.
+- Confirm that the tests pass.
+- Review the staged diff.
+- Ensure generated build files, credentials, secrets, and temporary files are
+  not staged.
+- Use a concise commit message describing the completed change.
+
+The agent must not:
+
+- Push commits without explicit user approval.
+- Force-push.
+- Amend an existing commit unless explicitly requested.
+- Rebase or rewrite history without explicit approval.
+- Delete branches or tags.
+- Modify Git remotes.
+- Bypass failing tests.
+- Use `git add .` without first reviewing the repository status.
+
+Prefer staging specific files:
+
+```sh
+git add path/to/file1 path/to/file2
+git diff --cached
+git commit -m "Describe the completed change"
+```
+
+### Continuous Integration
+
+Changes to `.circleci/config.yml` must be treated as production configuration
+changes.
+
+Before committing CircleCI configuration:
+
+- Validate the configuration when the CircleCI CLI is available.
+- Run the corresponding build and test commands locally.
+- Review the configuration diff.
+- Do not add tokens, credentials, or other secrets to the repository.
+
+A successful local test run does not guarantee that CircleCI will pass. Report
+the local result separately from the remote CircleCI result.
+
+The agent may inspect CircleCI results when access is available. It must not
+rerun, cancel, approve, or modify remote pipelines unless explicitly requested.
+
 ## Changelog
 
 Track project changes in `CHANGELOG.md` as they are made.

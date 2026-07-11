@@ -1,0 +1,37 @@
+version: 2.1
+
+jobs:
+  build-and-test:
+    docker:
+      - image: cimg/base:2024.02
+    environment:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - checkout
+
+      - run:
+          name: Install build dependencies
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y \
+              build-essential \
+              cmake \
+              ninja-build \
+              qt6-base-dev
+
+      - run:
+          name: Configure
+          command: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+
+      - run:
+          name: Build
+          command: cmake --build build --parallel
+
+      - run:
+          name: Test
+          command: ctest --test-dir build --output-on-failure
+
+workflows:
+  build-and-test:
+    jobs:
+      - build-and-test

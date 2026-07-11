@@ -4,6 +4,8 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Added CircleCI build and test configuration plus repository workflow guidance
+  for build, test, commit, and CI changes.
 - Added agent-neutral behavioral safeguards to the repository guidance and
   pointed assistant-specific guidance back to `AGENTS.md`.
 - Reorganized headers under `include/RetroSpreadsheet/` and added project
