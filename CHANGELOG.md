@@ -17,7 +17,6 @@ All notable project changes should be recorded here as they are made.
   maintenance.
 - Added Qt Test regression coverage for formulas, CSV persistence, dirty state,
   cell range references, and clipboard operations.
-- Added a macOS GitHub Actions CI workflow that builds the app and runs `ctest`.
 - Added dirty workbook tracking, save prompts, recent CSV files, and current
   file names in the window title.
 - Expanded formulas with direct cell references, multiplication, division, and

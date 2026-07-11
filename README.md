@@ -25,10 +25,14 @@ The spreadsheet serves as a realistic application for exploring:
 ## Repository Organization
 
 ```
-AGENTS.md        Repository-wide engineering principles
-ROADMAP.md       Project roadmap and milestones
-skills/          Specialized engineering knowledge
-src/             Application source code
+AGENTS.md                  Repository-wide engineering principles
+CMakeLists.txt             CMake build, app, and Qt Test targets
+include/RetroSpreadsheet/  Public headers for app components
+src/                       Application source code
+tests/                     Qt Test regression suites
+docs/                      Project documentation
+resources/                 Placeholder directories for future assets
+skills/                    Specialized engineering knowledge
 ```
 
 ### AGENTS.md
@@ -52,6 +56,45 @@ Examples include:
 - Qt development
 
 Keeping repository guidance separate from specialized skills helps minimize context while allowing deeper expertise when needed.
+
+---
+
+## Current Prototype
+
+The application is a Qt Widgets spreadsheet prototype with:
+
+- a 20 row by 10 column worksheet
+- CSV open, save, save as, and recent file actions
+- dirty workbook tracking with save prompts
+- editable cells plus an `fx` formula bar
+- copy, cut, and paste for contiguous cell ranges
+- formulas using direct references, `+`, `-`, `*`, `/`, `SUM(...)`, and
+  `AVERAGE(...)`
+
+Formula references use spreadsheet-style names such as `A1`. `SUM` and
+`AVERAGE` accept single cells, ranges such as `A1:B3`, and comma-separated
+arguments such as `A1,B1`.
+
+---
+
+## Build and Test
+
+Configure, build, and run the automated Qt Test suites with:
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+```
+
+Run the desktop application after building:
+
+```sh
+./build/RetroSpreadsheet.app/Contents/MacOS/RetroSpreadsheet
+```
+
+CircleCI also builds the project and runs `ctest` on Linux with Qt in
+offscreen mode.
 
 ---
 
