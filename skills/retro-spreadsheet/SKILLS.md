@@ -1,45 +1,38 @@
 ---
 name: excel97-project
-description: Use when developing the Retro Spreadsheet project, including planning, architecture, Qt Widgets implementation, formula evaluation, debugging, refactoring, testing, and code review.
+description: Use when developing the Retro Spreadsheet project, including planning, architecture, Qt Widgets implementation, formula evaluation, debugging, testing, and code review.
 ---
 
-# Retro Spreadsheet Project Skill
+# Retro Spreadsheet Project
 
-Use this skill for hands-on work in the Retro Spreadsheet repository.
+Follow **AGENTS.md** as the source of truth for workflow, Git behavior, verification, safety, and project scope.
 
-Follow `AGENTS.md` as the source of truth for workflow, safety, commits,
-verification, and scope. This skill adds project-specific focus for spreadsheet
-development.
+This skill provides spreadsheet-specific engineering guidance.
 
-## Project Focus
+---
 
-Build a polished educational C++17 and Qt 6 Widgets spreadsheet application
-inspired by classic desktop spreadsheets.
+## Project Vision
+
+Build a polished educational spreadsheet application inspired by classic desktop spreadsheets.
 
 Prioritize:
 
 - incremental milestones
 - working software after every change
-- clear separation between UI and business logic
-- readable C++ and Qt idioms
-- focused tests for model, formula, file, and UI behavior
+- readable C++
+- maintainable architecture
+- Qt best practices
+- focused automated tests
 
-Avoid generating broad feature sets in one pass. Plan, implement, compile, test,
-and then continue.
+Avoid implementing broad feature sets in a single step.
 
-## Before Coding
+---
 
-- Inspect the current project structure and relevant `CMakeLists.txt` files.
-- Read the affected source, headers, and tests.
-- Identify the smallest useful milestone.
-- Note compile blockers or architectural constraints.
-- Define the verification command before making changes.
+## Architecture
 
-## Architecture Guide
+Keep business logic independent from the user interface whenever practical.
 
-Favor Model-View or MVC boundaries.
-
-Core areas:
+Typical core components include:
 
 - MainWindow
 - SpreadsheetWidget
@@ -52,10 +45,18 @@ Core areas:
 - FileManager
 - UndoManager
 
-Introduce supporting systems only when needed by a concrete feature, such as a
-dependency graph, clipboard manager, selection model, or formatting engine.
+Introduce additional systems only when justified by a concrete feature, such as:
 
-## Feature Work
+- dependency graph
+- clipboard manager
+- selection model
+- formatting engine
+
+Favor simple designs that can evolve naturally.
+
+---
+
+## Feature Development
 
 For significant features, explain:
 
@@ -63,32 +64,84 @@ For significant features, explain:
 - affected files
 - architectural impact
 - tradeoffs
-- verification plan
+- verification strategy
 
-Keep UI behavior precise and testable. For formula, persistence, and model logic,
-prefer focused tests before or alongside implementation.
+Implement the smallest complete milestone before moving on.
+
+---
+
+## Formula System
+
+Keep formula evaluation independent of Qt widgets.
+
+Prefer:
+
+- deterministic evaluation
+- clear parser structure
+- isolated model logic
+- focused unit tests
+
+Avoid coupling evaluation directly to UI behavior.
+
+---
+
+## User Interface
+
+Maintain a polished desktop experience.
+
+Evaluate:
+
+- spacing
+- alignment
+- interaction flow
+- keyboard behavior
+- accessibility
+- consistency with Qt Widgets conventions
+
+Treat visual polish as part of correctness.
+
+---
 
 ## Debugging
 
-When compilation or tests fail:
+When builds or tests fail:
 
-1. Read the exact error output.
+1. Read the complete error.
 2. Identify the root cause.
 3. Make the smallest reasonable correction.
 4. Rebuild or rerun the failing test.
+5. Avoid unrelated changes.
 
-Do not regenerate unrelated code to fix local failures.
+---
 
 ## Review Lens
 
-Evaluate changes for:
+When reviewing code, consider:
 
 - maintainability
+- readability
+- Qt ownership
+- signal-slot usage
+- model/UI separation
 - memory safety
-- Qt ownership and signal-slot usage
-- model and UI separation
 - naming clarity
-- test coverage
 - unnecessary complexity
+- test coverage
 
-Ask whether the solution is simple enough to teach and strong enough to extend.
+Ask:
+
+> Is this simple enough to teach and solid enough to extend?
+
+---
+
+## Long-Term Direction
+
+As the project grows, continue favoring:
+
+- separation of concerns
+- incremental development
+- testable business logic
+- reusable components
+- educational clarity over clever implementations
+
+Build a codebase that demonstrates modern C++ engineering practices while remaining approachable to students and contributors.
