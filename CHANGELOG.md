@@ -4,6 +4,8 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Removed repository workflow instructions for agent-run `no-mistakes`
+  validation so pull request validation can be run manually.
 - Added repository guidance for running `no-mistakes` validation and monitoring
   CircleCI on pull requests, and aligned the README technology list with the
   C++17 project standard.

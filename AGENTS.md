@@ -113,21 +113,6 @@ git diff --cached
 git commit -m "Describe the completed change"
 ```
 
-### No-Mistakes Validation
-
-When the user asks to run `/no-mistakes` or asks for a branch to be validated,
-pushed, and opened as a pull request:
-
-- Complete the requested change on a feature branch.
-- Run the full local build and test workflow before committing.
-- Commit only the files that belong to the requested change.
-- Run `no-mistakes axi run --intent "<user goal and relevant constraints>"`
-  after the local commit exists on the feature branch.
-- Drive any `no-mistakes` gates according to the tool output and the
-  `/no-mistakes` skill instructions.
-- Leave the pull request open for human review unless the user explicitly asks
-  to merge it.
-
 ### Continuous Integration
 
 Changes to `.circleci/config.yml` must be treated as production configuration
@@ -145,8 +130,8 @@ the local result separately from the remote CircleCI result.
 
 The agent may inspect CircleCI results when access is available. It must not
 rerun, cancel, approve, or modify remote pipelines unless explicitly requested.
-After opening a pull request through `no-mistakes`, monitor CircleCI and address
-safe failures that are directly related to the branch changes.
+After opening a pull request, monitor CircleCI when explicitly requested and
+address safe failures that are directly related to the branch changes.
 
 ## Changelog
 
