@@ -4,8 +4,6 @@ A modern C++ desktop spreadsheet inspired by classic applications like Excel 97.
 
 This repository explores **Agentic Software Engineering**: using modern AI coding agents to collaboratively design, build, test, and evolve a real software project over time.
 
-Rather than generating an application in a single prompt, the emphasis is on incremental development, architectural consistency, and maintainable software.
-
 ---
 
 ## Project Goals
@@ -66,7 +64,7 @@ Every change should:
 - improve maintainability
 - be understandable by future developers
 
-The goal is to practice software engineering—not simply generate code.
+The goal is to practice software engineering - not simply generate code.
 
 ---
 
