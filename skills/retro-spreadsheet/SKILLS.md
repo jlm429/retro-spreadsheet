@@ -109,6 +109,9 @@ Implement only the next logical milestone.
 
 Always compile before declaring success.
 
+When the user requests `/no-mistakes`, follow the canonical validation workflow
+in `AGENTS.md` after the local build and tests pass.
+
 ## Behavioral Safeguards
 
 Follow the repository-wide behavioral guardrails in `AGENTS.md`.

@@ -4,6 +4,8 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Added repository guidance for running `no-mistakes` validation and monitoring
+  CircleCI on pull requests.
 - Added CircleCI build and test configuration plus repository workflow guidance
   for build, test, commit, and CI changes.
 - Added agent-neutral behavioral safeguards to the repository guidance and
