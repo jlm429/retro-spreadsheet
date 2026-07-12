@@ -121,6 +121,17 @@ Stop and alert the user immediately if a secret appears to be exposed.
 
 ---
 
+## Memory Safety
+
+- Use `std::unique_ptr` for exclusive ownership.
+- Use `std::shared_ptr` only when shared ownership is required.
+- Use raw pointers and references only as non-owning observers.
+- Prefer `std::optional`, `std::span`, and `std::string_view` where appropriate.
+- Favor value semantics over heap allocation.
+- Compile with warnings enabled and eliminate new warnings before merging.
+
+---
+
 ## Ask Before
 
 Ask before:
