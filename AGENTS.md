@@ -123,12 +123,14 @@ Stop and alert the user immediately if a secret appears to be exposed.
 
 ## Memory Safety
 
-- Use `std::unique_ptr` for exclusive ownership.
-- Use `std::shared_ptr` only when shared ownership is required.
-- Use raw pointers and references only as non-owning observers.
-- Prefer `std::optional`, `std::span`, and `std::string_view` where appropriate.
-- Favor value semantics over heap allocation.
-- Compile with warnings enabled and eliminate new warnings before merging.
+Prioritize memory-safe C++.
+
+- Prefer RAII and automatic storage over manual memory management.
+- Prefer standard library containers and smart pointers instead of raw owning pointers.
+- Never introduce `new`/`delete` unless there is a clear technical requirement.
+- Clearly document ownership when pointers or references are used.
+- Avoid dangling pointers, iterator invalidation, and undefined behavior.
+- Minimize object lifetimes and keep ownership explicit.
 
 ---
 
