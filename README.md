@@ -77,47 +77,6 @@ arguments such as `A1,B1`.
 
 ---
 
-## Build and Test
-
-Configure, build, and run the automated Qt Test suites with:
-
-```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build --parallel
-ctest --test-dir build --output-on-failure
-```
-
-On Debian or Ubuntu Linux, install the build dependencies used by CI before
-configuring:
-
-```sh
-sudo apt-get install -y build-essential cmake ninja-build qt6-base-dev libgl1-mesa-dev
-```
-
-Run the desktop application after building:
-
-```sh
-./build/RetroSpreadsheet.app/Contents/MacOS/RetroSpreadsheet
-```
-
-CircleCI also builds the project and runs `ctest` on Linux with Qt in
-offscreen mode.
-
----
-
-## Development Philosophy
-
-Every change should:
-
-- leave the application in a working state
-- be small, incremental, and verifiable
-- improve maintainability
-- be understandable by future developers
-
-The goal is to practice software engineering - not simply generate code.
-
----
-
 ## Technology
 
 - C++17
