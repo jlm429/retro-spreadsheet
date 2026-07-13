@@ -1,260 +1,120 @@
 #include "RetroSpreadsheet/FormulaEvaluator.h"
 
-#include <QRegularExpression>
-#include <QStringList>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <iomanip>
+#include <regex>
+#include <sstream>
 
-FormulaEvaluator::FormulaEvaluator(const Grid &cells)
-    : cells_(cells)
-{
-}
+FormulaEvaluator::FormulaEvaluator(const Grid &cells) : cells_(cells) {}
 
-QString FormulaEvaluator::evaluateCell(int row, int column) const
+std::string FormulaEvaluator::evaluateCell(int row, int column) const
 {
-    std::vector<std::vector<bool>> visiting(
-        cells_.size(),
-        std::vector<bool>(cells_.empty() ? 0 : cells_.front().size(), false));
+    std::vector<std::vector<bool>> visiting(cells_.size(), std::vector<bool>(cells_.empty() ? 0 : cells_.front().size()));
     return evaluateCell(row, column, visiting);
 }
 
-QString FormulaEvaluator::evaluateCell(int row, int column, std::vector<std::vector<bool>> &visiting) const
+std::string FormulaEvaluator::evaluateCell(int row, int column, std::vector<std::vector<bool>> &visiting) const
 {
-    if (row < 0 || column < 0 || row >= static_cast<int>(cells_.size())
-        || column >= static_cast<int>(cells_.front().size())) {
-        return "#REF!";
-    }
-
-    if (visiting[row][column]) {
-        return "#CYCLE!";
-    }
-
-    const QString raw = cells_[row][column].trimmed();
-    if (!raw.startsWith('=')) {
-        return raw;
-    }
-
+    if (cells_.empty() || row < 0 || column < 0 || row >= static_cast<int>(cells_.size())
+        || column >= static_cast<int>(cells_.front().size())) return "#REF!";
+    if (visiting[row][column]) return "#CYCLE!";
+    const std::string raw = trim(cells_[row][column]);
+    if (raw.empty() || raw.front() != '=') return raw;
     visiting[row][column] = true;
-    const QString result = evaluateFormula(raw, visiting);
+    const std::string result = evaluateFormula(raw, visiting);
     visiting[row][column] = false;
     return result;
 }
 
-QString FormulaEvaluator::evaluateFormula(const QString &formula, std::vector<std::vector<bool>> &visiting) const
+std::string FormulaEvaluator::evaluateFormula(const std::string &formula, std::vector<std::vector<bool>> &visiting) const
 {
-    if (formula.trimmed().mid(1).trimmed().startsWith("SUM", Qt::CaseInsensitive)) {
-        return evaluateSum(formula, visiting);
+    const std::string upper = uppercase(trim(formula.substr(1)));
+    if (upper.rfind("SUM", 0) == 0) return evaluateAggregate(formula, "SUM", visiting);
+    if (upper.rfind("AVERAGE", 0) == 0) return evaluateAggregate(formula, "AVERAGE", visiting);
+    static const std::regex reference(R"(^\s*=\s*([A-Za-z]+[1-9][0-9]*)\s*$)");
+    static const std::regex binary(R"(^\s*=\s*([A-Za-z]+[1-9][0-9]*)\s*([+\-*/])\s*([A-Za-z]+[1-9][0-9]*)\s*$)");
+    std::smatch match;
+    if (std::regex_match(formula, match, reference)) {
+        int row = 0, column = 0;
+        return parseReference(match[1].str(), row, column) ? evaluateCell(row, column, visiting) : "#REF!";
     }
-    if (formula.trimmed().mid(1).trimmed().startsWith("AVERAGE", Qt::CaseInsensitive)) {
-        return evaluateAverage(formula, visiting);
-    }
-
-    static const QRegularExpression referenceExpression(
-        R"(^=\s*([A-Za-z]+[1-9][0-9]*)\s*$)");
-
-    const QRegularExpressionMatch referenceMatch = referenceExpression.match(formula);
-    if (referenceMatch.hasMatch()) {
-        int row = 0;
-        int column = 0;
-        if (!parseReference(referenceMatch.captured(1), row, column)) {
-            return "#REF!";
-        }
-        return evaluateCell(row, column, visiting);
-    }
-
-    static const QRegularExpression expression(
-        R"(^=\s*([A-Za-z]+[1-9][0-9]*)\s*([+\-*/])\s*([A-Za-z]+[1-9][0-9]*)\s*$)");
-
-    const QRegularExpressionMatch match = expression.match(formula);
-    if (!match.hasMatch()) {
-        return "#FORMULA!";
-    }
-
-    int leftRow = 0;
-    int leftColumn = 0;
-    int rightRow = 0;
-    int rightColumn = 0;
-    if (!parseReference(match.captured(1), leftRow, leftColumn)
-        || !parseReference(match.captured(3), rightRow, rightColumn)) {
-        return "#REF!";
-    }
-
-    bool leftOk = false;
-    bool rightOk = false;
+    if (!std::regex_match(formula, match, binary)) return "#FORMULA!";
+    int leftRow = 0, leftColumn = 0, rightRow = 0, rightColumn = 0;
+    if (!parseReference(match[1].str(), leftRow, leftColumn) || !parseReference(match[3].str(), rightRow, rightColumn)) return "#REF!";
+    bool leftOk = false, rightOk = false;
     const double left = numericValue(evaluateCell(leftRow, leftColumn, visiting), leftOk);
     const double right = numericValue(evaluateCell(rightRow, rightColumn, visiting), rightOk);
-    if (!leftOk || !rightOk) {
-        return "#VALUE!";
+    if (!leftOk || !rightOk) return "#VALUE!";
+    switch (match[2].str()[0]) {
+    case '+': return formatNumber(left + right);
+    case '-': return formatNumber(left - right);
+    case '*': return formatNumber(left * right);
+    default: return right == 0.0 ? "#DIV/0!" : formatNumber(left / right);
     }
-
-    double value = 0.0;
-    const QString operation = match.captured(2);
-    if (operation == "+") {
-        value = left + right;
-    } else if (operation == "-") {
-        value = left - right;
-    } else if (operation == "*") {
-        value = left * right;
-    } else {
-        if (right == 0.0) {
-            return "#DIV/0!";
-        }
-        value = left / right;
-    }
-    return formatNumber(value);
 }
 
-QString FormulaEvaluator::evaluateSum(const QString &formula, std::vector<std::vector<bool>> &visiting) const
+std::string FormulaEvaluator::evaluateAggregate(const std::string &formula, const std::string &function,
+                                                std::vector<std::vector<bool>> &visiting) const
 {
-    static const QRegularExpression expression(R"(^=\s*SUM\s*\((.*)\)\s*$)",
-                                               QRegularExpression::CaseInsensitiveOption);
-
-    const QRegularExpressionMatch match = expression.match(formula);
-    if (!match.hasMatch()) {
-        return "#FORMULA!";
-    }
-
+    const std::regex expression("^\\s*=\\s*" + function + R"(\s*\((.*)\)\s*$)", std::regex::icase);
+    std::smatch match;
+    if (!std::regex_match(formula, match, expression)) return "#FORMULA!";
     double total = 0.0;
     int count = 0;
-    if (!evaluateRangeArguments(match.captured(1), visiting, total, count)) {
-        return count < 0 ? "#REF!" : "#VALUE!";
-    }
-    if (count == 0) {
-        return "#FORMULA!";
-    }
-
-    return formatNumber(total);
+    if (!evaluateRangeArguments(match[1].str(), visiting, total, count)) return count < 0 ? "#REF!" : "#VALUE!";
+    if (count == 0) return "#FORMULA!";
+    return formatNumber(function == "SUM" ? total : total / count);
 }
 
-QString FormulaEvaluator::evaluateAverage(const QString &formula, std::vector<std::vector<bool>> &visiting) const
+bool FormulaEvaluator::evaluateRangeArguments(const std::string &arguments, std::vector<std::vector<bool>> &visiting,
+                                              double &total, int &count) const
 {
-    static const QRegularExpression expression(R"(^=\s*AVERAGE\s*\((.*)\)\s*$)",
-                                               QRegularExpression::CaseInsensitiveOption);
-
-    const QRegularExpressionMatch match = expression.match(formula);
-    if (!match.hasMatch()) {
-        return "#FORMULA!";
+    std::stringstream input(arguments);
+    std::string argument;
+    bool any = false;
+    while (std::getline(input, argument, ',')) {
+        if (trim(argument).empty()) continue;
+        any = true;
+        int firstRow = 0, firstColumn = 0, lastRow = 0, lastColumn = 0;
+        if (!parseRange(argument, firstRow, firstColumn, lastRow, lastColumn)) { count = -1; return false; }
+        for (int row = firstRow; row <= lastRow; ++row) for (int column = firstColumn; column <= lastColumn; ++column) {
+            bool ok = false;
+            total += numericValue(evaluateCell(row, column, visiting), ok);
+            if (!ok) return false;
+            ++count;
+        }
     }
-
-    double total = 0.0;
-    int count = 0;
-    if (!evaluateRangeArguments(match.captured(1), visiting, total, count)) {
-        return count < 0 ? "#REF!" : "#VALUE!";
-    }
-    if (count == 0) {
-        return "#FORMULA!";
-    }
-    return formatNumber(total / count);
+    return any || trim(arguments).empty();
 }
 
-bool FormulaEvaluator::evaluateRangeArguments(
-    const QString &argumentText,
-    std::vector<std::vector<bool>> &visiting,
-    double &total,
-    int &count) const
+bool FormulaEvaluator::parseRange(const std::string &text, int &firstRow, int &firstColumn, int &lastRow, int &lastColumn) const
 {
-    const QStringList arguments = argumentText.split(',', Qt::SkipEmptyParts);
-    if (arguments.isEmpty()) {
-        count = 0;
-        return true;
+    const auto colon = text.find(':');
+    if (colon == std::string::npos) {
+        if (!parseReference(text, firstRow, firstColumn)) return false;
+        lastRow = firstRow; lastColumn = firstColumn; return true;
     }
-
-    for (const QString &argument : arguments) {
-        int startRow = 0;
-        int startColumn = 0;
-        int endRow = 0;
-        int endColumn = 0;
-        if (!parseRange(argument, startRow, startColumn, endRow, endColumn)) {
-            count = -1;
-            return false;
-        }
-
-        for (int row = startRow; row <= endRow; ++row) {
-            for (int column = startColumn; column <= endColumn; ++column) {
-                bool ok = false;
-                total += numericValue(evaluateCell(row, column, visiting), ok);
-                if (!ok) {
-                    return false;
-                }
-                ++count;
-            }
-        }
-    }
+    if (!parseReference(text.substr(0, colon), firstRow, firstColumn) || !parseReference(text.substr(colon + 1), lastRow, lastColumn)) return false;
+    if (lastRow < firstRow) std::swap(firstRow, lastRow);
+    if (lastColumn < firstColumn) std::swap(firstColumn, lastColumn);
     return true;
 }
 
-bool FormulaEvaluator::parseRange(
-    const QString &text, int &startRow, int &startColumn, int &endRow, int &endColumn) const
+bool FormulaEvaluator::parseReference(const std::string &text, int &row, int &column) const
 {
-    const QStringList endpoints = text.trimmed().split(':');
-    if (endpoints.size() == 1) {
-        if (!parseReference(endpoints[0], startRow, startColumn)) {
-            return false;
-        }
-        endRow = startRow;
-        endColumn = startColumn;
-        return true;
-    }
-
-    if (endpoints.size() != 2 || !parseReference(endpoints[0], startRow, startColumn)
-        || !parseReference(endpoints[1], endRow, endColumn)) {
-        return false;
-    }
-
-    if (endRow < startRow) {
-        std::swap(startRow, endRow);
-    }
-    if (endColumn < startColumn) {
-        std::swap(startColumn, endColumn);
-    }
-    return true;
+    static const std::regex expression(R"(^\s*([A-Za-z]+)([1-9][0-9]*)\s*$)");
+    std::smatch match;
+    if (!std::regex_match(text, match, expression)) return false;
+    column = 0;
+    for (const char character : uppercase(match[1].str())) column = column * 26 + character - 'A' + 1;
+    --column;
+    try { row = std::stoi(match[2].str()) - 1; } catch (...) { return false; }
+    return !cells_.empty() && row >= 0 && column >= 0 && row < static_cast<int>(cells_.size()) && column < static_cast<int>(cells_.front().size());
 }
 
-QString FormulaEvaluator::formatNumber(double value) const
-{
-    if (std::floor(value) == value) {
-        return QString::number(static_cast<qint64>(value));
-    }
-    return QString::number(value, 'g', 12);
-}
-
-bool FormulaEvaluator::parseReference(const QString &text, int &row, int &column) const
-{
-    static const QRegularExpression referenceExpression(R"(^([A-Za-z]+)([1-9][0-9]*)$)");
-
-    const QRegularExpressionMatch match = referenceExpression.match(text.trimmed());
-    if (!match.hasMatch()) {
-        return false;
-    }
-
-    int parsedColumn = 0;
-    const QString letters = match.captured(1).toUpper();
-    for (const QChar character : letters) {
-        parsedColumn = parsedColumn * 26 + character.unicode() - 'A' + 1;
-    }
-
-    bool rowOk = false;
-    const int parsedRow = match.captured(2).toInt(&rowOk);
-    if (!rowOk) {
-        return false;
-    }
-
-    row = parsedRow - 1;
-    column = parsedColumn - 1;
-    return row >= 0 && column >= 0 && row < static_cast<int>(cells_.size())
-        && !cells_.empty() && column < static_cast<int>(cells_.front().size());
-}
-
-double FormulaEvaluator::numericValue(const QString &text, bool &ok) const
-{
-    const QString trimmed = text.trimmed();
-    if (trimmed.startsWith('#')) {
-        ok = false;
-        return 0.0;
-    }
-    if (trimmed.isEmpty()) {
-        ok = true;
-        return 0.0;
-    }
-    return trimmed.toDouble(&ok);
-}
+std::string FormulaEvaluator::trim(const std::string &text) { const auto first = text.find_first_not_of(" \t\r\n"); return first == std::string::npos ? "" : text.substr(first, text.find_last_not_of(" \t\r\n") - first + 1); }
+std::string FormulaEvaluator::uppercase(std::string text) { std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); }); return text; }
+std::string FormulaEvaluator::formatNumber(double value) { if (std::floor(value) == value) return std::to_string(static_cast<long long>(value)); std::ostringstream output; output << std::setprecision(12) << value; return output.str(); }
+double FormulaEvaluator::numericValue(const std::string &text, bool &ok) { const std::string value = trim(text); if (value.empty()) { ok = true; return 0.0; } if (value.front() == '#') { ok = false; return 0.0; } try { size_t consumed = 0; const double result = std::stod(value, &consumed); ok = consumed == value.size(); return result; } catch (...) { ok = false; return 0.0; } }

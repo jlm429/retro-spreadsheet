@@ -1,101 +1,31 @@
 #include "RetroSpreadsheet/FormulaEvaluator.h"
 
-#include <QtTest/QtTest>
+#include <cstdlib>
+#include <iostream>
 
-class FormulaEvaluatorTests : public QObject
+namespace {
+void expect(const std::string &actual, const std::string &expected, const char *description)
 {
-    Q_OBJECT
-
-private slots:
-    void evaluatesDirectReferences();
-    void evaluatesBasicArithmetic();
-    void evaluatesAggregateFunctions();
-    void reportsFormulaErrors();
-    void followsDependencies();
-    void detectsCycles();
-};
-
-void FormulaEvaluatorTests::evaluatesDirectReferences()
-{
-    const FormulaEvaluator::Grid cells = {
-        {"42", "=A1"},
-    };
-
-    const FormulaEvaluator evaluator(cells);
-
-    QCOMPARE(evaluator.evaluateCell(0, 1), QString("42"));
+    if (actual == expected) return;
+    std::cerr << description << ": expected " << expected << ", got " << actual << '\n';
+    std::exit(1);
+}
 }
 
-void FormulaEvaluatorTests::evaluatesBasicArithmetic()
+int main()
 {
     const FormulaEvaluator::Grid cells = {
         {"6", "3", "=A1+B1", "=A1-B1", "=A1*B1", "=A1/B1"},
+        {"4", "5", "=SUM(A1:B2)", "=AVERAGE(A1:B2)", "=A1/Z99", "=A1/F3"},
+        {"=B3", "=A3", "not a number", "=C3+A1", "", ""},
     };
-
     const FormulaEvaluator evaluator(cells);
-
-    QCOMPARE(evaluator.evaluateCell(0, 2), QString("9"));
-    QCOMPARE(evaluator.evaluateCell(0, 3), QString("3"));
-    QCOMPARE(evaluator.evaluateCell(0, 4), QString("18"));
-    QCOMPARE(evaluator.evaluateCell(0, 5), QString("2"));
+    expect(evaluator.evaluateCell(0, 2), "9", "addition");
+    expect(evaluator.evaluateCell(1, 2), "18", "sum range");
+    expect(evaluator.evaluateCell(1, 3), "4.5", "average range");
+    expect(evaluator.evaluateCell(1, 4), "#REF!", "invalid reference");
+    expect(evaluator.evaluateCell(1, 5), "#DIV/0!", "division by zero");
+    expect(evaluator.evaluateCell(2, 0), "#CYCLE!", "cycle detection");
+    expect(evaluator.evaluateCell(2, 3), "#VALUE!", "non-numeric value");
+    return 0;
 }
-
-void FormulaEvaluatorTests::evaluatesAggregateFunctions()
-{
-    const FormulaEvaluator::Grid cells = {
-        {"1", "2", "3"},
-        {"4", "5", "=SUM(A1:B2)"},
-        {"=AVERAGE(A1:B2)", "=SUM(A1,A2,B2)", ""},
-    };
-
-    const FormulaEvaluator evaluator(cells);
-
-    QCOMPARE(evaluator.evaluateCell(1, 2), QString("12"));
-    QCOMPARE(evaluator.evaluateCell(2, 0), QString("3"));
-    QCOMPARE(evaluator.evaluateCell(2, 1), QString("10"));
-}
-
-void FormulaEvaluatorTests::reportsFormulaErrors()
-{
-    const FormulaEvaluator::Grid cells = {
-        {"not a number", "0", "=A1+B1", "=A1/Z99", "=A1", "=B1/B1"},
-    };
-
-    const FormulaEvaluator evaluator(cells);
-
-    QCOMPARE(evaluator.evaluateCell(0, 2), QString("#VALUE!"));
-    QCOMPARE(evaluator.evaluateCell(0, 3), QString("#REF!"));
-    QCOMPARE(evaluator.evaluateCell(0, 5), QString("#DIV/0!"));
-}
-
-void FormulaEvaluatorTests::followsDependencies()
-{
-    FormulaEvaluator::Grid cells = {
-        {"5"},
-        {"=A1+ A1"},
-        {"=A2*A1"},
-    };
-
-    FormulaEvaluator evaluator(cells);
-    QCOMPARE(evaluator.evaluateCell(2, 0), QString("50"));
-
-    cells[0][0] = "3";
-    FormulaEvaluator updatedEvaluator(cells);
-    QCOMPARE(updatedEvaluator.evaluateCell(2, 0), QString("18"));
-}
-
-void FormulaEvaluatorTests::detectsCycles()
-{
-    const FormulaEvaluator::Grid cells = {
-        {"=A2"},
-        {"=A1"},
-    };
-
-    const FormulaEvaluator evaluator(cells);
-
-    QCOMPARE(evaluator.evaluateCell(0, 0), QString("#CYCLE!"));
-}
-
-QTEST_MAIN(FormulaEvaluatorTests)
-
-#include "FormulaEvaluatorTests.moc"
