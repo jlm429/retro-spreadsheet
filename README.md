@@ -26,10 +26,10 @@ The spreadsheet serves as a realistic application for exploring:
 
 ```
 AGENTS.md                  Repository-wide engineering principles
-CMakeLists.txt             CMake build, app, and CTest targets
+CMakeLists.txt             CMake build and app targets
 include/RetroSpreadsheet/  Public headers for app components
 src/                       Application source code
-tests/                     Qt Test regression suites
+tests/                     Retained placeholders for a future test suite
 docs/                      Project documentation
 resources/                 Placeholder directories for future assets
 skills/                    Specialized engineering knowledge
@@ -84,15 +84,17 @@ arguments such as `A1,B1`.
 - Xcode or CLion
 - Git
 
-## Build and test
+## Build
 
 This project builds on macOS with Xcode command-line tools and CMake:
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --parallel
-ctest --test-dir build --output-on-failure
 ```
+
+The previous tests are retained as placeholders in `tests/`, but CMake and CI
+do not compile or run them until the new test suite is added.
 
 The portable C++17 engine stays synchronous for the current 20×10 workbook.
 It exposes immutable revision-tagged snapshots, per-document serial operation

@@ -4,6 +4,8 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Retained test files as placeholders while removing test targets and CI test
+  execution pending a new test suite.
 - Migrated the application from Qt Widgets to native macOS AppKit with an
   `NSDocument`-owned portable C++17 workbook engine.
 - Added native document lifecycle, CSV file dialogs and recent documents,

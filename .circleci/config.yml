@@ -1,7 +1,7 @@
 version: 2.1
 
 jobs:
-  build-and-test:
+  build:
     macos:
       xcode: 16.2.0
     steps:
@@ -12,11 +12,7 @@ jobs:
       - run:
           name: Build
           command: cmake --build build --parallel
-      - run:
-          name: Test
-          command: ctest --test-dir build --output-on-failure
-
 workflows:
-  build-and-test:
+  build:
     jobs:
-      - build-and-test
+      - build

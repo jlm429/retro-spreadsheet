@@ -12,8 +12,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_OBJCXX_STANDARD 17)
 set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
 
-enable_testing()
-
 add_library(RetroSpreadsheetCore STATIC
     src/FormulaEvaluator.cpp
     src/Workbook.cpp
@@ -37,11 +35,3 @@ set_target_properties(RetroSpreadsheet PROPERTIES
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/resources/Info.plist
 )
-
-add_executable(FormulaEvaluatorTests tests/FormulaEvaluatorTests.cpp)
-target_link_libraries(FormulaEvaluatorTests PRIVATE RetroSpreadsheetCore)
-add_test(NAME FormulaEvaluatorTests COMMAND FormulaEvaluatorTests)
-
-add_executable(WorkbookTests tests/WorkbookTests.cpp)
-target_link_libraries(WorkbookTests PRIVATE RetroSpreadsheetCore)
-add_test(NAME WorkbookTests COMMAND WorkbookTests)

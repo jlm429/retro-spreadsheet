@@ -2,20 +2,19 @@
 
 This project uses a conventional C++ desktop application layout.
 
-- `.circleci/config.yml`: Linux CI build and `ctest` workflow.
-- `CMakeLists.txt`: CMake project, application target, core library, and tests.
+- `.circleci/config.yml`: macOS CI build workflow.
+- `CMakeLists.txt`: CMake project, AppKit bundle target, and core library.
 - `include/RetroSpreadsheet/`: public headers for app components.
 - `src/`: implementation files and the application entry point.
 - `resources/icons/`: future application icons and toolbar artwork.
-- `resources/themes/`: future Qt stylesheets or theme assets.
-- `tests/`: Qt Test regression suites runnable through `ctest`.
+- `resources/themes/`: future native theme assets.
+- `tests/`: retained placeholders for a future test suite, not built or run.
 - `skills/`: project-specific agent guidance.
 
-The core target contains the main window, spreadsheet controller, and formula
-evaluator. The controller owns the fixed 20 by 10 grid, CSV persistence,
-clipboard operations, dirty state, and recalculation. The evaluator keeps
-formula behavior independent from the GUI.
+The core target contains `Workbook` and `FormulaEvaluator`. `Workbook` owns the
+fixed 20 by 10 grid, CSV persistence, dirty state, and recalculation. The
+AppKit window owns selection and pasteboard operations, native dialogs, and
+menus. Formula behavior remains independent from the GUI.
 
-Keep new business logic separate from UI code where practical. Prefer adding Qt
-Test coverage for formula, file, and controller behavior before expanding the
-GUI.
+Keep new business logic separate from UI code where practical. A new test suite
+will be added before further GUI expansion.
