@@ -4,6 +4,15 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Migrated the application from Qt Widgets to native macOS AppKit with an
+  `NSDocument`-owned portable C++17 workbook engine.
+- Added native document lifecycle, CSV file dialogs and recent documents,
+  dirty handling, formula bar editing, `NSTableView` spreadsheet editing, and
+  range-aware clipboard commands.
+- Removed Qt dependencies, replaced Qt tests with portable CTest coverage, and
+  moved CircleCI builds to macOS.
+- Added revision-tagged snapshots and cancellation tokens as explicit safe
+  seams for future per-document serial background operations.
 - Documented Linux build dependencies and refreshed README guidance summary.
 - Added the CircleCI OpenGL development package required for Qt6Gui detection.
 - Condensed and reorganized repository and skill guidance to remove duplicate
