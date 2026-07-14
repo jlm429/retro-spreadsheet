@@ -2,12 +2,12 @@
 
 This project uses a conventional C++ desktop application layout.
 
-- `.circleci/config.yml`: unattended macOS configure, build, and labeled core-test workflow. See the README test section for UI smoke-test availability.
-- `CMakeLists.txt`: CMake project, AppKit bundle target, and core library.
+- `.circleci/config.yml`: unattended Linux configure, portable-core build, and labeled core-test workflow. See the README test section for local UI smoke-test availability.
+- `CMakeLists.txt`: portable CMake core and tests, with an optional macOS AppKit bundle target.
 - `include/RetroSpreadsheet/`: public headers for app components.
 - `src/`: implementation files and the application entry point.
 - `resources/`: bundle metadata plus placeholders for future icons and native theme assets.
-- `tests/`: dependency-free C++ core tests. CTest also runs a bounded AppKit smoke test.
+- `tests/`: dependency-free C++ core tests. On local macOS AppKit builds, CTest also registers a bounded UI smoke test.
 - `skills/`: project-specific agent guidance.
 
 The core target contains `Workbook` and `FormulaEvaluator`. `Workbook` owns the

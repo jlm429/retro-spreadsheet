@@ -1,9 +1,9 @@
 version: 2.1
 
 jobs:
-  build:
-    macos:
-      xcode: 16.2.0
+  core:
+    docker:
+      - image: cimg/base:stable
     steps:
       - checkout
       - run:
@@ -13,11 +13,11 @@ jobs:
           name: Build
           command: cmake --build build --parallel
       - run:
-          name: Core tests
+          name: Core tests without native UI
           command: |
-            /usr/bin/perl -e 'alarm shift; exec @ARGV' 30 \
+            timeout 30s \
               ctest --test-dir build --output-on-failure --label-exclude ui --timeout 15
 workflows:
   build:
     jobs:
-      - build
+      - core

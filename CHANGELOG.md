@@ -4,6 +4,10 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Moved CircleCI to a Linux executor that configures, builds, and tests only
+  the portable C++ core. CMake now enables Objective-C++ and the AppKit bundle
+  only for macOS application builds; the local UI smoke test is labeled `ui`
+  and `local` and is not registered for portable builds.
 - Stopped running the interactive AppKit smoke test on CircleCI's headless
   macOS executors. CI now excludes the `ui` CTest label, runs the bounded core
   suite with a 30-second outer timeout, and documents local UI smoke testing.
