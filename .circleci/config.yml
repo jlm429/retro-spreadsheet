@@ -3,7 +3,8 @@ version: 2.1
 jobs:
   core:
     docker:
-      - image: cimg/base:stable
+      # This dated image provides CMake newer than the project's 3.21 minimum.
+      - image: cimg/base:2024.12
     steps:
       - checkout
       - run:

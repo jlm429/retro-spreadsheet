@@ -4,6 +4,8 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Pinned the CircleCI Linux image to a version with CMake newer than the
+  project's 3.21 minimum requirement.
 - Moved CircleCI to a Linux executor that configures, builds, and tests only
   the portable C++ core. CMake now enables Objective-C++ and the AppKit bundle
   only for macOS application builds; the local UI smoke test is labeled `ui`
