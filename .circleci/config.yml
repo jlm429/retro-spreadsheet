@@ -12,6 +12,15 @@ jobs:
       - run:
           name: Build
           command: cmake --build build --parallel
+      - run:
+          name: Core tests
+          command: ctest --test-dir build --output-on-failure -LE ui
+      - run:
+          name: UI smoke test
+          command: ctest --test-dir build --output-on-failure -L ui
+      - store_artifacts:
+          path: build/ui-test-artifacts
+          destination: ui-test-artifacts
 workflows:
   build:
     jobs:

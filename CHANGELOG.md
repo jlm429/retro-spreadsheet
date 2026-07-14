@@ -4,6 +4,10 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Added CTest-based engine, CSV persistence, undo/redo, and AppKit smoke test
+  coverage with bounded timeouts and UI failure diagnostics in CI.
+- Added test-maintenance and Definition of Done requirements to the canonical
+  repository guidance for future agent work.
 - Fixed AppKit document registration and restored reliable active-cell editing,
   formula-bar updates, and clipboard commands in the spreadsheet grid.
 - Retained test files as placeholders while removing test targets and CI test

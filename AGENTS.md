@@ -9,7 +9,7 @@ Build a modern educational spreadsheet application inspired by classic desktop s
 Stack:
 
 - C++17
-- Qt 6 Widgets
+- AppKit and Objective-C++ at the UI boundary
 - CMake
 - CLion
 - macOS
@@ -66,6 +66,32 @@ Standard verification:
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --parallel
 ```
+
+---
+
+## Testing
+
+Maintain the test suite alongside production code.
+
+- New features should include appropriate unit, integration, or UI tests.
+- Bug fixes should include a regression test whenever practical.
+- Update existing tests when behavior intentionally changes.
+- Tests must be deterministic and never hang indefinitely.
+- Use explicit timeouts for asynchronous or UI operations and fail with
+  descriptive messages.
+- Keep business logic testable independently of the UI whenever possible.
+- Leave the repository in a more testable state than it was found.
+
+---
+
+## Definition of Done
+
+A task is complete when:
+
+- The code builds successfully.
+- Existing tests pass.
+- New or modified behavior is covered by appropriate tests.
+- Documentation is updated if behavior changed.
 
 ---
 

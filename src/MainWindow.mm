@@ -4,12 +4,41 @@
 #include "RetroSpreadsheet/Workbook.h"
 
 #include <memory>
+#include <cstdlib>
 
 namespace {
 NSString *asNSString(const std::string &value) { return [NSString stringWithUTF8String:value.c_str()]; }
 std::string asString(NSString *value) { return value ? std::string(value.UTF8String ?: "") : std::string(); }
 void requireMainThread() { NSCAssert(NSThread.isMainThread, @"Workbook UI access must stay on the main thread."); }
 NSString *columnName(NSInteger column) { return [NSString stringWithFormat:@"%c", static_cast<int>('A' + column)]; }
+bool uiSmokeTestMode = false;
+bool uiSmokeTestFailed = false;
+
+NSTableView *findTableView(NSView *view)
+{
+    if ([view isKindOfClass:NSTableView.class]) return static_cast<NSTableView *>(view);
+    for (NSView *subview in view.subviews) if (NSTableView *table = findTableView(subview)) return table;
+    return nil;
+}
+
+void writeUiSmokeDiagnostics(NSString *message)
+{
+    const char *directory = std::getenv("RETRO_SPREADSHEET_UI_ARTIFACTS");
+    if (!directory) { NSLog(@"UI smoke test failure: %@", message); return; }
+    NSString *path = [NSString stringWithUTF8String:directory];
+    [[NSFileManager defaultManager] createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:nil];
+    [message writeToFile:[path stringByAppendingPathComponent:@"failure.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    NSString *diagnostics = [NSString stringWithFormat:@"%@\n\nWindow hierarchy:\n%@\n", message, NSApp.windows];
+    [diagnostics writeToFile:[path stringByAppendingPathComponent:@"diagnostics.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    NSWindow *window = NSApp.keyWindow ?: NSApp.windows.firstObject;
+    if (window) {
+        NSView *content = window.contentView;
+        NSBitmapImageRep *image = [content bitmapImageRepForCachingDisplayInRect:content.bounds];
+        [content cacheDisplayInRect:content.bounds toBitmapImageRep:image];
+        [[image representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:[path stringByAppendingPathComponent:@"failure.png"] atomically:YES];
+    }
+    NSLog(@"UI smoke test failure: %@", message);
+}
 }
 
 @class WorkbookDocument;
@@ -316,6 +345,44 @@ NSString *columnName(NSInteger column) { return [NSString stringWithFormat:@"%c"
 
 @implementation AppDelegate
 - (BOOL)applicationShouldOpenUntitledFile:(NSApplication *)sender { return YES; }
+
+- (void)applicationDidFinishLaunching:(NSNotification *)notification
+{
+    if (!uiSmokeTestMode) return;
+    const NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5.0];
+    __block void (^checkWindow)(void);
+    checkWindow = ^{
+        NSWindow *window = NSApp.keyWindow ?: NSApp.windows.firstObject;
+        NSTableView *table = window ? findTableView(window.contentView) : nil;
+        if (window.visible && !table.hidden) {
+            [window makeKeyAndOrderFront:nil];
+            [table selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
+            if (table.selectedRow != 0 || table.tableColumns.count == 0) {
+                uiSmokeTestFailed = true;
+                writeUiSmokeDiagnostics(@"FAIL:\nCould not select the first spreadsheet cell within 2 seconds.\nExpected an editable grid with cell A1 selected.");
+            } else {
+                NSTableColumn *column = table.tableColumns.firstObject;
+                [table.dataSource tableView:table setObjectValue:@"UI smoke value" forTableColumn:column row:0];
+                [table reloadData];
+                NSView *cell = [table viewAtColumn:0 row:0 makeIfNecessary:YES];
+                if (![cell isKindOfClass:NSTextField.class] || ![static_cast<NSTextField *>(cell).stringValue isEqualToString:@"UI smoke value"]) {
+                    uiSmokeTestFailed = true;
+                    writeUiSmokeDiagnostics(@"FAIL:\nBasic editing of A1 did not complete within 2 seconds.\nExpected the visible spreadsheet cell to display the entered value.");
+                }
+            }
+            [NSApp terminate:nil];
+            return;
+        }
+        if (deadline.timeIntervalSinceNow <= 0.0) {
+            uiSmokeTestFailed = true;
+            writeUiSmokeDiagnostics(@"FAIL:\nMain window did not appear within 5 seconds.\nExpected visible spreadsheet window.\nObserved application launched but no visible grid became available.");
+            [NSApp terminate:nil];
+            return;
+        }
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC), dispatch_get_main_queue(), checkWindow);
+    };
+    dispatch_async(dispatch_get_main_queue(), checkWindow);
+}
 @end
 
 static NSMenuItem *menuItem(NSString *title, SEL action, NSString *key)
@@ -339,12 +406,14 @@ static void buildMenus()
 
 int runRetroSpreadsheetApplication(int argc, const char *argv[])
 {
+    for (int index = 1; index < argc; ++index) if (std::string(argv[index]) == "--ui-smoke-test") uiSmokeTestMode = true;
     @autoreleasepool {
         NSApplication *application = NSApplication.sharedApplication;
         application.activationPolicy = NSApplicationActivationPolicyRegular;
         buildMenus();
         AppDelegate *delegate = [[AppDelegate alloc] init]; application.delegate = delegate;
         [application activateIgnoringOtherApps:YES];
-        return NSApplicationMain(argc, argv);
+        NSApplicationMain(argc, argv);
+        return uiSmokeTestFailed ? EXIT_FAILURE : EXIT_SUCCESS;
     }
 }

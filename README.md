@@ -29,7 +29,7 @@ AGENTS.md                  Repository-wide engineering principles
 CMakeLists.txt             CMake build and app targets
 include/RetroSpreadsheet/  Public headers for app components
 src/                       Application source code
-tests/                     Retained placeholders for a future test suite
+tests/                     Fast C++ engine tests and UI smoke-test support
 docs/                      Project documentation
 resources/                 Placeholder directories for future assets
 skills/                    Specialized engineering knowledge
@@ -93,8 +93,26 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --parallel
 ```
 
-The previous tests are retained as placeholders in `tests/`, but CMake and CI
-do not compile or run them until the new test suite is added.
+## Tests
+
+CTest runs the dependency-free C++ engine suite and a separate AppKit smoke
+test. The engine suite is the default fast-feedback path and does not launch a
+GUI or access the network. The smoke test launches the app bundle, verifies a
+visible grid, selects A1, edits it, and exits cleanly.
+
+```sh
+ctest --test-dir build --output-on-failure -LE ui
+ctest --test-dir build --output-on-failure -L ui
+```
+
+Every CTest process has a timeout. The UI smoke test has a 10-second process
+limit, waits at most 5 seconds for the window and grid, and captures a PNG
+screenshot plus `failure.txt` in `build/ui-test-artifacts` when it fails.
+
+For future expansion, use GoogleTest when a vendored C++ assertion framework
+is desired, and XCTest for richer AppKit interaction tests. The current CTest
+runner intentionally has no downloaded dependency, which keeps local and CI
+feedback deterministic and unattended.
 
 The portable C++17 engine stays synchronous for the current 20×10 workbook.
 It exposes immutable revision-tagged snapshots, per-document serial operation

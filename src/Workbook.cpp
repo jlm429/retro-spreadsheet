@@ -13,10 +13,32 @@ Workbook::Workbook()
 
 void Workbook::clear()
 {
+    bool changed = false;
+    for (const auto &row : cells_) for (const auto &value : row) if (!value.empty()) { changed = true; break; }
+    if (!changed) return;
+    recordUndoState();
     for (auto &row : cells_) std::fill(row.begin(), row.end(), std::string());
     recalculate();
-    modified_ = false;
-    ++revision_;
+    didMutate();
+}
+
+bool Workbook::canUndo() const { return !undoStates_.empty(); }
+bool Workbook::canRedo() const { return !redoStates_.empty(); }
+bool Workbook::undo()
+{
+    if (!canUndo()) return false;
+    redoStates_.push_back({cells_, modified_});
+    const State state = undoStates_.back(); undoStates_.pop_back();
+    cells_ = state.cells; modified_ = state.modified; recalculate(); ++revision_;
+    return true;
+}
+bool Workbook::redo()
+{
+    if (!canRedo()) return false;
+    undoStates_.push_back({cells_, modified_});
+    const State state = redoStates_.back(); redoStates_.pop_back();
+    cells_ = state.cells; modified_ = state.modified; recalculate(); ++revision_;
+    return true;
 }
 
 bool Workbook::isModified() const { return modified_; }
@@ -33,6 +55,7 @@ std::string Workbook::displayValue(int row, int column) const { return validCell
 void Workbook::setRawValue(int row, int column, const std::string &value)
 {
     if (!validCell(row, column) || cells_[row][column] == value) return;
+    recordUndoState();
     cells_[row][column] = value;
     recalculate();
     didMutate();
@@ -70,6 +93,8 @@ bool Workbook::loadCsv(const std::string &path, std::string *errorMessage)
     if (row < RowCount && (column != 0 || !value.empty())) placeValue();
     recalculate();
     modified_ = false;
+    undoStates_.clear();
+    redoStates_.clear();
     ++revision_;
     return true;
 }
@@ -107,6 +132,7 @@ std::string Workbook::selectionText(int firstRow, int firstColumn, int lastRow, 
 
 void Workbook::pasteText(int startRow, int startColumn, const std::string &text)
 {
+    const State previous{cells_, modified_};
     std::istringstream rows(text);
     std::string rowText;
     bool changed = false;
@@ -118,16 +144,17 @@ void Workbook::pasteText(int startRow, int startColumn, const std::string &text)
             if (cells_[row][column] != value) { cells_[row][column] = value; changed = true; }
         }
     }
-    if (changed) { recalculate(); didMutate(); }
+    if (changed) { undoStates_.push_back(previous); redoStates_.clear(); recalculate(); didMutate(); }
 }
 
 void Workbook::clearRange(int firstRow, int firstColumn, int lastRow, int lastColumn)
 {
+    const State previous{cells_, modified_};
     bool changed = false;
     for (int row = std::max(0, firstRow); row <= std::min(RowCount - 1, lastRow); ++row)
         for (int column = std::max(0, firstColumn); column <= std::min(ColumnCount - 1, lastColumn); ++column)
             if (!cells_[row][column].empty()) { cells_[row][column].clear(); changed = true; }
-    if (changed) { recalculate(); didMutate(); }
+    if (changed) { undoStates_.push_back(previous); redoStates_.clear(); recalculate(); didMutate(); }
 }
 
 void Workbook::recalculate()
@@ -139,6 +166,7 @@ void Workbook::recalculate()
 }
 
 void Workbook::didMutate() { modified_ = true; ++revision_; }
+void Workbook::recordUndoState() { undoStates_.push_back({cells_, modified_}); redoStates_.clear(); }
 
 std::string Workbook::escapeCsvValue(const std::string &value)
 {

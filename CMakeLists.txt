@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.21)
 
 project(RetroSpreadsheet VERSION 0.2.0 LANGUAGES CXX OBJCXX)
 
+include(CTest)
+
 if(NOT APPLE)
     message(FATAL_ERROR "Retro Spreadsheet is a native macOS AppKit application and must be built on macOS.")
 endif()
@@ -35,3 +37,23 @@ set_target_properties(RetroSpreadsheet PROPERTIES
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/resources/Info.plist
 )
+
+if(BUILD_TESTING)
+    add_executable(RetroSpreadsheetCoreTests
+        tests/FormulaEvaluatorTests.cpp
+        tests/WorkbookTests.cpp
+    )
+    target_link_libraries(RetroSpreadsheetCoreTests PRIVATE RetroSpreadsheetCore)
+    target_compile_options(RetroSpreadsheetCoreTests PRIVATE -Wall -Wextra -Wpedantic)
+    add_test(NAME RetroSpreadsheetCoreTests COMMAND RetroSpreadsheetCoreTests)
+    set_tests_properties(RetroSpreadsheetCoreTests PROPERTIES TIMEOUT 5 LABELS "unit;integration")
+
+    add_test(NAME RetroSpreadsheetUiSmoke
+        COMMAND $<TARGET_BUNDLE_DIR:RetroSpreadsheet>/Contents/MacOS/RetroSpreadsheet --ui-smoke-test)
+    set_tests_properties(RetroSpreadsheetUiSmoke PROPERTIES
+        TIMEOUT 10
+        LABELS "ui"
+        RUN_SERIAL TRUE
+        ENVIRONMENT "RETRO_SPREADSHEET_UI_ARTIFACTS=${CMAKE_BINARY_DIR}/ui-test-artifacts"
+    )
+endif()

@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 // Portable, main-thread-owned worksheet model. The snapshot and cancellation
 // types are deliberate seams for future per-document background operations.
@@ -19,6 +20,10 @@ public:
 
     Workbook();
     void clear();
+    bool canUndo() const;
+    bool canRedo() const;
+    bool undo();
+    bool redo();
     bool isModified() const;
     void markSaved();
     std::uint64_t revision() const;
@@ -37,13 +42,17 @@ public:
     void clearRange(int firstRow, int firstColumn, int lastRow, int lastColumn);
 
 private:
+    struct State { FormulaEvaluator::Grid cells; bool modified; };
     FormulaEvaluator::Grid cells_;
     FormulaEvaluator::Grid displayValues_;
     std::uint64_t revision_ = 0;
     bool modified_ = false;
     std::shared_ptr<CancellationToken> operationToken_;
+    std::vector<State> undoStates_;
+    std::vector<State> redoStates_;
     void recalculate();
     void didMutate();
+    void recordUndoState();
     static std::string escapeCsvValue(const std::string &value);
     static bool validCell(int row, int column);
 };
