@@ -4,6 +4,9 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Stopped running the interactive AppKit smoke test on CircleCI's headless
+  macOS executors. CI now excludes the `ui` CTest label, runs the bounded core
+  suite with a 30-second outer timeout, and documents local UI smoke testing.
 - Clarified the AppKit and C++ core boundary, removed an unused document
   operation queue and cancellation API, and added an immutable snapshot
   evaluation seam for future background calculation.

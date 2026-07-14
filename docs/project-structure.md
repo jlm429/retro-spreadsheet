@@ -2,7 +2,7 @@
 
 This project uses a conventional C++ desktop application layout.
 
-- `.circleci/config.yml`: unattended macOS configure, build, core-test, and UI-smoke workflow.
+- `.circleci/config.yml`: unattended macOS configure, build, and labeled core-test workflow. The interactive UI smoke test is local-only.
 - `CMakeLists.txt`: CMake project, AppKit bundle target, and core library.
 - `include/RetroSpreadsheet/`: public headers for app components.
 - `src/`: implementation files and the application entry point.
