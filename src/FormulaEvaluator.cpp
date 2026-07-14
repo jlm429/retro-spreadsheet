@@ -32,7 +32,10 @@ std::string FormulaEvaluator::evaluateFormula(const std::string &formula, std::v
 {
     const std::string upper = uppercase(trim(formula.substr(1)));
     for (const std::string &function : {"SUM", "AVERAGE", "MIN", "MAX", "COUNT"}) {
-        if (upper.rfind(function + "(", 0) == 0) return evaluateAggregate(formula, function, visiting);
+        if (upper.rfind(function, 0) != 0) continue;
+        const std::size_t openingParenthesis = upper.find_first_not_of(" \t\r\n", function.size());
+        if (openingParenthesis != std::string::npos && upper[openingParenthesis] == '(')
+            return evaluateAggregate(formula, function, visiting);
     }
     static const std::regex reference(R"(^\s*=\s*([A-Za-z]+[1-9][0-9]*)\s*$)");
     static const std::regex binary(R"(^\s*=\s*([A-Za-z]+[1-9][0-9]*)\s*([+\-*/])\s*([A-Za-z]+[1-9][0-9]*)\s*$)");

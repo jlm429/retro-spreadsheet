@@ -430,14 +430,18 @@ void writeUiSmokeSuccess()
 - (void)commitFormulaBar
 {
     if (_activeRow < 0 || _activeColumn < 0) return;
-    const FormulaEditingSession::Cell destination = _formulaSession->isEditing()
+    const BOOL completedFormulaSession = _formulaSession->isEditing();
+    const FormulaEditingSession::Cell destination = completedFormulaSession
         ? _formulaSession->destination() : FormulaEditingSession::Cell{static_cast<int>(_activeRow), static_cast<int>(_activeColumn)};
-    const std::string value = _formulaSession->isEditing() ? _formulaSession->commit() : asString(_formulaBar.stringValue);
+    const std::string value = completedFormulaSession ? _formulaSession->commit() : asString(_formulaBar.stringValue);
     _formulaBar.stringValue = asNSString(value);
     _activeRow = destination.row;
     _activeColumn = destination.column;
     if ([self.workbookDocument workbook]->setRawValue(destination.row, destination.column, value)) {
         [self.workbookDocument workbookDidChange];
+        [_table reloadData];
+        [self updateFormulaBar];
+    } else if (completedFormulaSession) {
         [_table reloadData];
         [self updateFormulaBar];
     }

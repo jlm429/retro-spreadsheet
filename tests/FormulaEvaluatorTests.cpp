@@ -74,3 +74,14 @@ TEST(FormulaEvaluator_EvaluatesMinMaxAndCountRanges)
     REQUIRE_EQUAL(evaluator.evaluateCell(0, 5), "8");
     REQUIRE_EQUAL(evaluator.evaluateCell(0, 6), "2");
 }
+
+TEST(FormulaEvaluator_AllowsWhitespaceBeforeAggregateParentheses)
+{
+    const auto values = grid({{"2", "3", "=SUM (A1:B1)", "=AVERAGE (A1:B1)", "=MIN (A1:B1)", "=MAX (A1:B1)", "=COUNT (A1:B1)"}});
+    const FormulaEvaluator evaluator(values);
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 2), "5");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 3), "2.5");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 4), "2");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 5), "3");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 6), "2");
+}
