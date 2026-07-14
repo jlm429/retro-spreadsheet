@@ -4,6 +4,8 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Fixed AppKit document registration and restored reliable active-cell editing,
+  formula-bar updates, and clipboard commands in the spreadsheet grid.
 - Retained test files as placeholders while removing test targets and CI test
   execution pending a new test suite.
 - Migrated the application from Qt Widgets to native macOS AppKit with an
