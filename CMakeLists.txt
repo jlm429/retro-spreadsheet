@@ -30,6 +30,7 @@ add_executable(RetroSpreadsheet MACOSX_BUNDLE
     resources/Info.plist
 )
 target_link_libraries(RetroSpreadsheet PRIVATE RetroSpreadsheetCore "-framework AppKit")
+target_compile_options(RetroSpreadsheet PRIVATE -Wall -Wextra -Wpedantic -fobjc-arc)
 set_target_properties(RetroSpreadsheet PROPERTIES
     MACOSX_BUNDLE_GUI_IDENTIFIER com.jlm429.retrospreadsheet
     MACOSX_BUNDLE_BUNDLE_NAME "Retro Spreadsheet"
@@ -49,7 +50,10 @@ if(BUILD_TESTING)
     set_tests_properties(RetroSpreadsheetCoreTests PROPERTIES TIMEOUT 5 LABELS "unit;integration")
 
     add_test(NAME RetroSpreadsheetUiSmoke
-        COMMAND $<TARGET_BUNDLE_DIR:RetroSpreadsheet>/Contents/MacOS/RetroSpreadsheet --ui-smoke-test)
+        COMMAND ${CMAKE_COMMAND}
+            -DRETRO_SPREADSHEET_APP=$<TARGET_BUNDLE_DIR:RetroSpreadsheet>
+            -DRETRO_SPREADSHEET_UI_ARTIFACTS=${CMAKE_BINARY_DIR}/ui-test-artifacts
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunUiSmoke.cmake)
     set_tests_properties(RetroSpreadsheetUiSmoke PROPERTIES
         TIMEOUT 10
         LABELS "ui"

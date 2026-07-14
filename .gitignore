@@ -33,15 +33,6 @@ Testing/
 *.dll
 *.exe
 
-# Qt generated files
-moc_*.cpp
-moc_*.h
-qrc_*.cpp
-ui_*.h
-*.qrc.depends
-.qmake.stash
-.qt/
-
 # IDE and editor files
 .idea/
 .vscode/

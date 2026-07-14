@@ -2,21 +2,20 @@
 
 #include "RetroSpreadsheet/FormulaEvaluator.h"
 
-#include <atomic>
 #include <cstdint>
-#include <memory>
 #include <string>
 #include <vector>
 
-// Portable, main-thread-owned worksheet model. The snapshot and cancellation
-// types are deliberate seams for future per-document background operations.
+// Portable worksheet model with no AppKit dependency. A Workbook is mutable and
+// not safe for concurrent access. Use Snapshot and evaluateSnapshot() to move
+// read-only calculation to background work in the future.
 class Workbook
 {
 public:
     static constexpr int RowCount = 20;
     static constexpr int ColumnCount = 10;
     struct Snapshot { FormulaEvaluator::Grid cells; std::uint64_t revision; };
-    class CancellationToken { public: void cancel() { cancelled_.store(true); } bool isCancelled() const { return cancelled_.load(); } private: std::atomic_bool cancelled_{false}; };
+    struct Evaluation { FormulaEvaluator::Grid displayValues; std::uint64_t revision; };
 
     Workbook();
     void clear();
@@ -29,17 +28,16 @@ public:
     std::uint64_t revision() const;
     bool isCurrentRevision(std::uint64_t revision) const;
     Snapshot snapshot() const;
-    std::shared_ptr<CancellationToken> beginOperation();
-    void cancelOperations();
+    static Evaluation evaluateSnapshot(const Snapshot &snapshot);
 
     std::string rawValue(int row, int column) const;
     std::string displayValue(int row, int column) const;
-    void setRawValue(int row, int column, const std::string &value);
+    bool setRawValue(int row, int column, const std::string &value);
     bool loadCsv(const std::string &path, std::string *errorMessage);
     bool saveCsv(const std::string &path, std::string *errorMessage);
     std::string selectionText(int firstRow, int firstColumn, int lastRow, int lastColumn) const;
-    void pasteText(int startRow, int startColumn, const std::string &text);
-    void clearRange(int firstRow, int firstColumn, int lastRow, int lastColumn);
+    bool pasteText(int startRow, int startColumn, const std::string &text);
+    bool clearRange(int firstRow, int firstColumn, int lastRow, int lastColumn);
 
 private:
     struct State { FormulaEvaluator::Grid cells; bool modified; };
@@ -47,7 +45,6 @@ private:
     FormulaEvaluator::Grid displayValues_;
     std::uint64_t revision_ = 0;
     bool modified_ = false;
-    std::shared_ptr<CancellationToken> operationToken_;
     std::vector<State> undoStates_;
     std::vector<State> redoStates_;
     void recalculate();

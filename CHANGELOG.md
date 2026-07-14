@@ -4,6 +4,15 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Clarified the AppKit and C++ core boundary, removed an unused document
+  operation queue and cancellation API, and added an immutable snapshot
+  evaluation seam for future background calculation.
+- Made core mutations report whether they changed workbook state so AppKit only
+  marks a document dirty after a real edit. Added regression coverage for
+  no-op and out-of-range mutations plus snapshot evaluation.
+- Updated stale project and skill documentation left from the Qt migration.
+- Made the UI smoke test launch the app bundle through Launch Services and
+  require an explicit success marker from the application.
 - Added CTest-based engine, CSV persistence, undo/redo, and AppKit smoke test
   coverage with bounded timeouts and UI failure diagnostics in CI.
 - Added test-maintenance and Definition of Done requirements to the canonical
