@@ -8,9 +8,14 @@
 
 namespace {
 NSString *asNSString(const std::string &value) { return [NSString stringWithUTF8String:value.c_str()]; }
-std::string asString(NSString *value) { return value ? std::string(value.UTF8String ?: "") : std::string(); }
+std::string asString(NSString *value)
+{
+    const char *utf8Value = value.UTF8String;
+    return utf8Value ? std::string(utf8Value) : std::string();
+}
 void requireMainThread() { NSCAssert(NSThread.isMainThread, @"Workbook UI access must stay on the main thread."); }
 NSString *columnName(NSInteger column) { return [NSString stringWithFormat:@"%c", static_cast<int>('A' + column)]; }
+NSWindow *frontWindow() { return NSApp.keyWindow ? NSApp.keyWindow : NSApp.windows.firstObject; }
 bool uiSmokeTestMode = false;
 bool uiSmokeTestFailed = false;
 
@@ -30,7 +35,7 @@ void writeUiSmokeDiagnostics(NSString *message)
     [message writeToFile:[path stringByAppendingPathComponent:@"failure.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
     NSString *diagnostics = [NSString stringWithFormat:@"%@\n\nWindow hierarchy:\n%@\n", message, NSApp.windows];
     [diagnostics writeToFile:[path stringByAppendingPathComponent:@"diagnostics.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-    NSWindow *window = NSApp.keyWindow ?: NSApp.windows.firstObject;
+    NSWindow *window = frontWindow();
     if (window) {
         NSView *content = window.contentView;
         NSBitmapImageRep *image = [content bitmapImageRepForCachingDisplayInRect:content.bounds];
@@ -38,6 +43,15 @@ void writeUiSmokeDiagnostics(NSString *message)
         [[image representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:[path stringByAppendingPathComponent:@"failure.png"] atomically:YES];
     }
     NSLog(@"UI smoke test failure: %@", message);
+}
+
+void writeUiSmokeSuccess()
+{
+    const char *directory = std::getenv("RETRO_SPREADSHEET_UI_ARTIFACTS");
+    if (!directory) return;
+    NSString *path = [NSString stringWithUTF8String:directory];
+    [[NSFileManager defaultManager] createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:nil];
+    [@"PASS\n" writeToFile:[path stringByAppendingPathComponent:@"success.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
 }
 
@@ -88,12 +102,9 @@ void writeUiSmokeDiagnostics(NSString *message)
 @interface WorkbookDocument : NSDocument
 {
     std::unique_ptr<Workbook> _workbook;
-    NSOperationQueue *_operationQueue;
 }
 - (Workbook *)workbook;
 - (void)workbookDidChange;
-// Future background results must call this on the main thread before applying.
-- (BOOL)canApplyResultForRevision:(std::uint64_t)revision;
 @end
 
 @implementation WorkbookDocument
@@ -103,28 +114,11 @@ void writeUiSmokeDiagnostics(NSString *message)
     self = [super init];
     if (self) {
         _workbook = std::make_unique<Workbook>();
-        _operationQueue = [[NSOperationQueue alloc] init];
-        _operationQueue.name = @"com.jlm429.retrospreadsheet.document-operations";
-        _operationQueue.maxConcurrentOperationCount = 1;
     }
     return self;
 }
 
-- (void)dealloc
-{
-    _workbook->cancelOperations();
-    [_operationQueue cancelAllOperations];
-    [_operationQueue release];
-    [super dealloc];
-}
-
 - (Workbook *)workbook { requireMainThread(); return _workbook.get(); }
-
-- (BOOL)canApplyResultForRevision:(std::uint64_t)revision
-{
-    requireMainThread();
-    return _workbook->isCurrentRevision(revision);
-}
 
 - (void)makeWindowControllers
 {
@@ -264,8 +258,11 @@ void writeUiSmokeDiagnostics(NSString *message)
 {
     [self selectCellAtRow:row column:column.identifier.integerValue];
     Workbook *workbook = self.workbookDocument.workbook;
-    workbook->setRawValue(static_cast<int>(row), column.identifier.integerValue, asString(object));
-    [self.workbookDocument workbookDidChange]; [tableView reloadData]; [self updateFormulaBar];
+    if (workbook->setRawValue(static_cast<int>(row), column.identifier.integerValue, asString(object))) {
+        [self.workbookDocument workbookDidChange];
+        [tableView reloadData];
+        [self updateFormulaBar];
+    }
 }
 
 - (void)tableViewSelectionDidChange:(NSNotification *)notification
@@ -296,8 +293,11 @@ void writeUiSmokeDiagnostics(NSString *message)
 - (void)commitFormulaBar
 {
     if (_activeRow < 0 || _activeColumn < 0) return;
-    [self.workbookDocument workbook]->setRawValue(static_cast<int>(_activeRow), static_cast<int>(_activeColumn), asString(_formulaBar.stringValue));
-    [self.workbookDocument workbookDidChange]; [_table reloadData]; [self updateFormulaBar];
+    if ([self.workbookDocument workbook]->setRawValue(static_cast<int>(_activeRow), static_cast<int>(_activeColumn), asString(_formulaBar.stringValue))) {
+        [self.workbookDocument workbookDidChange];
+        [_table reloadData];
+        [self updateFormulaBar];
+    }
 }
 
 - (void)selectedRangeFirstRow:(NSInteger *)firstRow firstColumn:(NSInteger *)firstColumn lastRow:(NSInteger *)lastRow lastColumn:(NSInteger *)lastColumn
@@ -323,16 +323,22 @@ void writeUiSmokeDiagnostics(NSString *message)
     [self copy:sender];
     NSInteger firstRow, firstColumn, lastRow, lastColumn;
     [self selectedRangeFirstRow:&firstRow firstColumn:&firstColumn lastRow:&lastRow lastColumn:&lastColumn];
-    [self.workbookDocument workbook]->clearRange(static_cast<int>(firstRow), static_cast<int>(firstColumn), static_cast<int>(lastRow), static_cast<int>(lastColumn));
-    [self.workbookDocument workbookDidChange]; [_table reloadData]; [self updateFormulaBar];
+    if ([self.workbookDocument workbook]->clearRange(static_cast<int>(firstRow), static_cast<int>(firstColumn), static_cast<int>(lastRow), static_cast<int>(lastColumn))) {
+        [self.workbookDocument workbookDidChange];
+        [_table reloadData];
+        [self updateFormulaBar];
+    }
 }
 
 - (IBAction)paste:(id)sender
 {
     NSString *text = [NSPasteboard.generalPasteboard stringForType:NSPasteboardTypeString];
     if (!text || _activeRow < 0 || _activeColumn < 0) return;
-    [self.workbookDocument workbook]->pasteText(static_cast<int>(_activeRow), static_cast<int>(_activeColumn), asString(text));
-    [self.workbookDocument workbookDidChange]; [_table reloadData]; [self updateFormulaBar];
+    if ([self.workbookDocument workbook]->pasteText(static_cast<int>(_activeRow), static_cast<int>(_activeColumn), asString(text))) {
+        [self.workbookDocument workbookDidChange];
+        [_table reloadData];
+        [self updateFormulaBar];
+    }
 }
 
 - (IBAction)insertSum:(id)sender { [self beginFormula:@"=SUM("]; }
@@ -341,6 +347,8 @@ void writeUiSmokeDiagnostics(NSString *message)
 @end
 
 @interface AppDelegate : NSObject <NSApplicationDelegate>
+@property(nonatomic, strong) NSDate *uiSmokeDeadline;
+- (void)runUiSmokeCheck;
 @end
 
 @implementation AppDelegate
@@ -349,45 +357,47 @@ void writeUiSmokeDiagnostics(NSString *message)
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
     if (!uiSmokeTestMode) return;
-    const NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5.0];
-    __block void (^checkWindow)(void);
-    checkWindow = ^{
-        NSWindow *window = NSApp.keyWindow ?: NSApp.windows.firstObject;
-        NSTableView *table = window ? findTableView(window.contentView) : nil;
-        if (window.visible && !table.hidden) {
-            [window makeKeyAndOrderFront:nil];
-            [table selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
-            if (table.selectedRow != 0 || table.tableColumns.count == 0) {
-                uiSmokeTestFailed = true;
-                writeUiSmokeDiagnostics(@"FAIL:\nCould not select the first spreadsheet cell within 2 seconds.\nExpected an editable grid with cell A1 selected.");
-            } else {
-                NSTableColumn *column = table.tableColumns.firstObject;
-                [table.dataSource tableView:table setObjectValue:@"UI smoke value" forTableColumn:column row:0];
-                [table reloadData];
-                NSView *cell = [table viewAtColumn:0 row:0 makeIfNecessary:YES];
-                if (![cell isKindOfClass:NSTextField.class] || ![static_cast<NSTextField *>(cell).stringValue isEqualToString:@"UI smoke value"]) {
-                    uiSmokeTestFailed = true;
-                    writeUiSmokeDiagnostics(@"FAIL:\nBasic editing of A1 did not complete within 2 seconds.\nExpected the visible spreadsheet cell to display the entered value.");
-                }
-            }
-            [NSApp terminate:nil];
-            return;
-        }
-        if (deadline.timeIntervalSinceNow <= 0.0) {
+    self.uiSmokeDeadline = [NSDate dateWithTimeIntervalSinceNow:5.0];
+    dispatch_async(dispatch_get_main_queue(), ^{ [self runUiSmokeCheck]; });
+}
+
+- (void)runUiSmokeCheck
+{
+    NSWindow *window = frontWindow();
+    NSTableView *table = window ? findTableView(window.contentView) : nil;
+    if (window.visible && !table.hidden) {
+        [window makeKeyAndOrderFront:nil];
+        [table selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
+        if (table.selectedRow != 0 || table.tableColumns.count == 0) {
             uiSmokeTestFailed = true;
-            writeUiSmokeDiagnostics(@"FAIL:\nMain window did not appear within 5 seconds.\nExpected visible spreadsheet window.\nObserved application launched but no visible grid became available.");
-            [NSApp terminate:nil];
-            return;
+            writeUiSmokeDiagnostics(@"FAIL:\nCould not select the first spreadsheet cell within 2 seconds.\nExpected an editable grid with cell A1 selected.");
+        } else {
+            NSTableColumn *column = table.tableColumns.firstObject;
+            [table.dataSource tableView:table setObjectValue:@"UI smoke value" forTableColumn:column row:0];
+            [table reloadData];
+            NSView *cell = [table viewAtColumn:0 row:0 makeIfNecessary:YES];
+            if (![cell isKindOfClass:NSTextField.class] || ![static_cast<NSTextField *>(cell).stringValue isEqualToString:@"UI smoke value"]) {
+                uiSmokeTestFailed = true;
+                writeUiSmokeDiagnostics(@"FAIL:\nBasic editing of A1 did not complete within 2 seconds.\nExpected the visible spreadsheet cell to display the entered value.");
+            }
         }
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC), dispatch_get_main_queue(), checkWindow);
-    };
-    dispatch_async(dispatch_get_main_queue(), checkWindow);
+        if (!uiSmokeTestFailed) writeUiSmokeSuccess();
+        [NSApp terminate:nil];
+        return;
+    }
+    if (self.uiSmokeDeadline.timeIntervalSinceNow <= 0.0) {
+        uiSmokeTestFailed = true;
+        writeUiSmokeDiagnostics(@"FAIL:\nMain window did not appear within 5 seconds.\nExpected visible spreadsheet window.\nObserved application launched but no visible grid became available.");
+        [NSApp terminate:nil];
+        return;
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{ [self runUiSmokeCheck]; });
 }
 @end
 
 static NSMenuItem *menuItem(NSString *title, SEL action, NSString *key)
 {
-    return [[NSMenuItem alloc] initWithTitle:title action:action keyEquivalent:key ?: @""];
+    return [[NSMenuItem alloc] initWithTitle:title action:action keyEquivalent:key ? key : @""];
 }
 
 static void buildMenus()

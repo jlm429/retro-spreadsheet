@@ -45,6 +45,8 @@ TEST(Workbook_UndoRedoRestoresCellContentsAndModifiedState)
 TEST(Workbook_PasteClearAndSelectionRespectBoundaries)
 {
     Workbook workbook;
+    REQUIRE(!workbook.pasteText(-1, 0, "ignored"));
+    REQUIRE(!workbook.pasteText(0, Workbook::ColumnCount, "ignored"));
     workbook.pasteText(0, 0, "one\ttwo\nthree\tfour");
     REQUIRE_EQUAL(workbook.selectionText(0, 0, 1, 1), "one\ttwo\nthree\tfour");
     workbook.clearRange(-2, 1, 0, 99);
@@ -81,14 +83,25 @@ TEST(Workbook_CSVReportsFileErrors)
     REQUIRE_EQUAL(error, "The file could not be opened.");
 }
 
-TEST(Workbook_SnapshotsAndCancellationTrackOperations)
+TEST(Workbook_SnapshotEvaluationIsIndependentFromLaterMutations)
 {
     Workbook workbook;
-    const auto initial = workbook.snapshot();
-    workbook.setRawValue(0, 0, "value");
-    REQUIRE(!workbook.isCurrentRevision(initial.revision));
-    const auto operation = workbook.beginOperation();
-    REQUIRE(!operation->isCancelled());
-    workbook.cancelOperations();
-    REQUIRE(operation->isCancelled());
+    workbook.setRawValue(0, 0, "2");
+    workbook.setRawValue(0, 1, "=A1+A1");
+    const auto snapshot = workbook.snapshot();
+    workbook.setRawValue(0, 0, "5");
+
+    const auto evaluation = Workbook::evaluateSnapshot(snapshot);
+    REQUIRE_EQUAL(evaluation.displayValues[0][1], "4");
+    REQUIRE(evaluation.revision == snapshot.revision);
+    REQUIRE(!workbook.isCurrentRevision(evaluation.revision));
+}
+
+TEST(Workbook_NoOpMutationsDoNotCreateUndoHistory)
+{
+    Workbook workbook;
+    REQUIRE(!workbook.setRawValue(0, 0, ""));
+    REQUIRE(!workbook.clearRange(0, 0, 0, 0));
+    REQUIRE(!workbook.pasteText(0, 0, ""));
+    REQUIRE(!workbook.canUndo());
 }

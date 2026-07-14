@@ -1,6 +1,6 @@
 ---
 name: excel97-project
-description: Use when developing the Retro Spreadsheet project, including planning, architecture, Qt Widgets implementation, formula evaluation, debugging, testing, and code review.
+description: Use when developing the Retro Spreadsheet project, including planning, architecture, AppKit implementation, formula evaluation, debugging, testing, and code review.
 ---
 
 # Retro Spreadsheet Project
@@ -21,7 +21,7 @@ Prioritize:
 - working software after every change
 - readable C++
 - maintainable architecture
-- Qt best practices
+- AppKit best practices
 - focused automated tests
 
 Avoid implementing broad feature sets in a single step.
@@ -34,9 +34,9 @@ Keep business logic independent from the user interface whenever practical.
 
 Typical core components include:
 
-- MainWindow
-- SpreadsheetWidget
-- SpreadsheetModel
+- WorkbookDocument
+- SpreadsheetWindowController
+- NSTableView presentation code
 - Workbook
 - Worksheet
 - Cell
@@ -72,7 +72,7 @@ Implement the smallest complete milestone before moving on.
 
 ## Formula System
 
-Keep formula evaluation independent of Qt widgets.
+Keep formula evaluation independent of AppKit.
 
 Prefer:
 
@@ -96,7 +96,7 @@ Evaluate:
 - interaction flow
 - keyboard behavior
 - accessibility
-- consistency with Qt Widgets conventions
+- consistency with AppKit conventions
 
 Treat visual polish as part of correctness.
 
@@ -120,8 +120,8 @@ When reviewing code, consider:
 
 - maintainability
 - readability
-- Qt ownership
-- signal-slot usage
+- AppKit ownership
+- target-action and delegate usage
 - model/UI separation
 - memory safety
 - naming clarity

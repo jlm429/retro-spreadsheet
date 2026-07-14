@@ -106,8 +106,10 @@ ctest --test-dir build --output-on-failure -L ui
 ```
 
 Every CTest process has a timeout. The UI smoke test has a 10-second process
-limit, waits at most 5 seconds for the window and grid, and captures a PNG
-screenshot plus `failure.txt` in `build/ui-test-artifacts` when it fails.
+limit, launches the app bundle through Launch Services, waits at most 5 seconds
+for the window and grid, and captures a PNG screenshot plus `failure.txt` in
+`build/ui-test-artifacts` when it fails. A `success.txt` marker prevents a
+launcher failure from being reported as a passing UI test.
 
 For future expansion, use GoogleTest when a vendored C++ assertion framework
 is desired, and XCTest for richer AppKit interaction tests. The current CTest
@@ -115,7 +117,12 @@ runner intentionally has no downloaded dependency, which keeps local and CI
 feedback deterministic and unattended.
 
 The portable C++17 engine stays synchronous for the current 20×10 workbook.
-It exposes immutable revision-tagged snapshots, per-document serial operation
-queues, cancellation tokens, and main-thread revision checks as safe seams for
-future background operations. AppKit controllers and all live workbook access
-remain on the main thread.
+`Workbook` itself is mutable and is not thread-safe. Future expensive work
+must take a `Workbook::Snapshot` on the main thread, call the pure
+`Workbook::evaluateSnapshot()` API away from AppKit, then return to the main
+thread and compare the result revision before applying it. AppKit controllers,
+`NSDocument`, and all access to the live `Workbook` remain on the main thread.
+
+The current grid has one active cell. The core supports rectangular text
+selection, paste, and clear operations so the UI can add multi-cell selection
+without moving spreadsheet behavior into AppKit.
