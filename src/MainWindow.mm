@@ -382,6 +382,9 @@ void writeUiSmokeSuccess()
             }
         }
         if (!uiSmokeTestFailed) writeUiSmokeSuccess();
+        for (NSDocument *document in NSDocumentController.sharedDocumentController.documents) {
+            [document updateChangeCount:NSChangeCleared];
+        }
         [NSApp terminate:nil];
         return;
     }

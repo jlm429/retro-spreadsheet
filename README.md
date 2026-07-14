@@ -95,19 +95,28 @@ cmake --build build --parallel
 
 ## Tests
 
-CTest runs the dependency-free C++ engine suite and a separate AppKit smoke
-test. The engine suite is the default fast-feedback path and does not launch a
-GUI or access the network. The smoke test launches the app bundle, verifies a
-visible grid, selects A1, edits it, and exits cleanly.
+CTest runs the dependency-free C++ engine suite and registers a separate
+AppKit smoke test. The engine suite is the default fast-feedback path and does
+not launch a GUI or access the network. CircleCI uses a macOS executor to
+build the AppKit application, but excludes the interactive UI test because its
+executor is non-interactive. The smoke test remains available for local macOS
+runs. It launches the app bundle, verifies a visible grid, selects A1, edits
+it, and exits cleanly.
 
 ```sh
-ctest --test-dir build --output-on-failure -LE ui
-ctest --test-dir build --output-on-failure -L ui
+# Core tests, including unit and integration coverage. This is the CI path.
+ctest --test-dir build --output-on-failure --label-exclude ui --timeout 15
+
+# AppKit smoke test. Run locally in an interactive macOS session.
+ctest --test-dir build --output-on-failure --label-regex ui
 ```
 
-Every CTest process has a timeout. The UI smoke test has a 10-second process
-limit, launches the app bundle through Launch Services, waits at most 5 seconds
-for the window and grid, and captures a PNG screenshot plus `failure.txt` in
+Every CTest process has an explicit timeout. Core tests have a 5-second limit,
+and the UI smoke test has a 10-second limit. CI additionally applies CTest's
+15-second timeout and a 30-second outer process alarm, so a child process that
+does not terminate cannot hold the job indefinitely. The UI smoke test launches
+the app bundle through Launch Services, waits at most 5 seconds for the window
+and grid, and captures a PNG screenshot plus `failure.txt` in
 `build/ui-test-artifacts` when it fails. A `success.txt` marker prevents a
 launcher failure from being reported as a passing UI test.
 

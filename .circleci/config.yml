@@ -14,13 +14,9 @@ jobs:
           command: cmake --build build --parallel
       - run:
           name: Core tests
-          command: ctest --test-dir build --output-on-failure -LE ui
-      - run:
-          name: UI smoke test
-          command: ctest --test-dir build --output-on-failure -L ui
-      - store_artifacts:
-          path: build/ui-test-artifacts
-          destination: ui-test-artifacts
+          command: |
+            /usr/bin/perl -e 'alarm shift; exec @ARGV' 30 \
+              ctest --test-dir build --output-on-failure --label-exclude ui --timeout 15
 workflows:
   build:
     jobs:
