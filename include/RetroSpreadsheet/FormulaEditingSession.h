@@ -19,11 +19,13 @@ public:
     void setDraft(const std::string &value);
     void setReferenceRange(Range range);
     void insertReference(Range range, std::size_t insertionOffset);
+    bool insertFunction(const std::string &functionName, std::size_t insertionOffset);
     Range referenceRange() const;
     std::string commit();
     std::string cancel();
 
     static std::string referenceText(Range range);
+    static bool isSupportedFunction(const std::string &functionName);
 
 private:
     bool editing_ = false;

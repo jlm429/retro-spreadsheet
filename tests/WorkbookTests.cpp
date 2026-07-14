@@ -183,3 +183,73 @@ TEST(Workbook_ClearRemovesFormattingWithoutCellValues)
     REQUIRE(workbook.undo());
     REQUIRE(workbook.cellFormat(0, 0) == format);
 }
+
+TEST(Workbook_FormattingRangePreservesRawValuesFormulasAndEmptyCells)
+{
+    Workbook workbook;
+    workbook.setRawValue(0, 0, "42");
+    workbook.setRawValue(0, 1, "=A1*A1");
+    CellFormat format;
+    format.fontFamily = "Courier";
+    format.fontSize = 18.0;
+    format.bold = true;
+    format.italic = true;
+    format.underline = true;
+    format.alignment = HorizontalAlignment::Right;
+
+    REQUIRE(workbook.setFormatRange(0, 0, 1, 2, format));
+    REQUIRE_EQUAL(workbook.rawValue(0, 0), "42");
+    REQUIRE_EQUAL(workbook.rawValue(0, 1), "=A1*A1");
+    REQUIRE_EQUAL(workbook.rawValue(1, 2), "");
+    REQUIRE_EQUAL(workbook.displayValue(0, 1), "1764");
+    REQUIRE(workbook.cellFormat(1, 2) == format);
+    REQUIRE(workbook.undo());
+    REQUIRE_EQUAL(workbook.rawValue(0, 1), "=A1*A1");
+    REQUIRE(workbook.cellFormat(1, 2) == CellFormat{});
+    REQUIRE(workbook.redo());
+    REQUIRE_EQUAL(workbook.rawValue(0, 1), "=A1*A1");
+    REQUIRE(workbook.cellFormat(1, 2) == format);
+}
+
+TEST(Workbook_MixedCellAndFormattingUndoRedoRecalculatesWithoutLosingFormats)
+{
+    Workbook workbook;
+    CellFormat format;
+    format.alignment = HorizontalAlignment::Center;
+    REQUIRE(workbook.setRawValue(0, 0, "2"));
+    REQUIRE(workbook.setRawValue(0, 1, "=A1+A1"));
+    REQUIRE(workbook.setCellFormat(0, 1, format));
+    REQUIRE(workbook.setRawValue(0, 0, "5"));
+    REQUIRE_EQUAL(workbook.displayValue(0, 1), "10");
+    REQUIRE(workbook.undo());
+    REQUIRE_EQUAL(workbook.displayValue(0, 1), "4");
+    REQUIRE(workbook.cellFormat(0, 1) == format);
+    REQUIRE(workbook.undo());
+    REQUIRE(workbook.cellFormat(0, 1) == CellFormat{});
+    REQUIRE(workbook.redo());
+    REQUIRE(workbook.cellFormat(0, 1) == format);
+    REQUIRE(workbook.redo());
+    REQUIRE_EQUAL(workbook.displayValue(0, 1), "10");
+}
+
+TEST(Workbook_ClearFormattingOnlyWorkbookIsUndoableAndCsvOmitsTheFormat)
+{
+    const std::filesystem::path path = std::filesystem::temp_directory_path() / "retro-spreadsheet-format-only.csv";
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+    Workbook workbook;
+    CellFormat format;
+    format.underline = true;
+    REQUIRE(workbook.setCellFormat(0, 0, format));
+    workbook.clear();
+    REQUIRE(workbook.cellFormat(0, 0) == CellFormat{});
+    REQUIRE(workbook.undo());
+    REQUIRE(workbook.cellFormat(0, 0) == format);
+    std::string error;
+    REQUIRE(workbook.saveCsv(path.string(), &error));
+    Workbook reloaded;
+    REQUIRE(reloaded.loadCsv(path.string(), &error));
+    REQUIRE_EQUAL(reloaded.rawValue(0, 0), "");
+    REQUIRE(reloaded.cellFormat(0, 0) == CellFormat{});
+    std::filesystem::remove(path, ignored);
+}

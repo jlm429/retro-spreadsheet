@@ -23,3 +23,30 @@ TEST(FormulaEditingSession_FunctionTemplateCommitsAndEscapesToOriginalContent)
     session.beginFunction({1, 1}, "prior", "MAX");
     REQUIRE_EQUAL(session.cancel(), "prior");
 }
+
+TEST(FormulaEditingSession_TracksDraftReferencesAndNoOpCommitWithoutChangingDestination)
+{
+    FormulaEditingSession session;
+    session.begin({2, 3}, "=SUM(A1:A2)");
+    session.setDraft("=SUM (A1:A2)");
+    session.insertReference({{0, 1}, {1, 1}}, session.draft().size());
+    REQUIRE_EQUAL(session.draft(), "=SUM (A1:A2)B1:B2");
+    REQUIRE_EQUAL(session.commit(), "=SUM (A1:A2)B1:B2");
+    REQUIRE(!session.isEditing());
+
+    session.begin({2, 3}, "unchanged");
+    REQUIRE_EQUAL(session.commit(), "unchanged");
+    REQUIRE(!session.isEditing());
+}
+
+TEST(FormulaEditingSession_InsertsOnlySupportedFunctionsIntoTheDraft)
+{
+    FormulaEditingSession session;
+    session.begin({0, 0}, "");
+    REQUIRE(session.insertFunction("SUM", 0));
+    REQUIRE_EQUAL(session.draft(), "=SUM(");
+    REQUIRE(session.insertFunction("MAX", session.draft().size()));
+    REQUIRE_EQUAL(session.draft(), "=SUM(MAX(");
+    REQUIRE(!session.insertFunction("MEDIAN", session.draft().size()));
+    REQUIRE_EQUAL(session.draft(), "=SUM(MAX(");
+}

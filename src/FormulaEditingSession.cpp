@@ -23,7 +23,8 @@ void FormulaEditingSession::begin(Cell destination, const std::string &originalC
 void FormulaEditingSession::beginFunction(Cell destination, const std::string &originalContents, const std::string &functionName)
 {
     begin(destination, originalContents);
-    draft_ = "=" + functionName + "(";
+    draft_.clear();
+    insertFunction(functionName, 0);
 }
 
 bool FormulaEditingSession::isEditing() const { return editing_; }
@@ -40,6 +41,15 @@ void FormulaEditingSession::insertReference(Range range, std::size_t insertionOf
     const std::string reference = referenceText(range);
     insertionOffset = std::min(insertionOffset, draft_.size());
     draft_.insert(insertionOffset, reference);
+}
+
+bool FormulaEditingSession::insertFunction(const std::string &functionName, std::size_t insertionOffset)
+{
+    if (!editing_ || !isSupportedFunction(functionName)) return false;
+    insertionOffset = std::min(insertionOffset, draft_.size());
+    const std::string prefix = draft_.empty() ? "=" : "";
+    draft_.insert(insertionOffset, prefix + functionName + "(");
+    return true;
 }
 
 FormulaEditingSession::Range FormulaEditingSession::referenceRange() const { return referenceRange_; }
@@ -66,4 +76,10 @@ std::string FormulaEditingSession::referenceText(Range range)
     const std::string first = columnName(firstColumn) + std::to_string(firstRow + 1);
     const std::string last = columnName(lastColumn) + std::to_string(lastRow + 1);
     return first == last ? first : first + ":" + last;
+}
+
+bool FormulaEditingSession::isSupportedFunction(const std::string &functionName)
+{
+    return functionName == "SUM" || functionName == "AVERAGE" || functionName == "MIN"
+        || functionName == "MAX" || functionName == "COUNT";
 }

@@ -4,6 +4,16 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Fixed AppKit cell editing so a first-responder change cannot replace a raw
+  formula with its displayed result. Ribbon formatting now applies only core
+  formatting operations to the selected cell or rectangle.
+- Fixed formula-bar event ordering: Return is the only commit path, Escape
+  restores the original raw content, and function/reference insertion remains
+  in the draft until commit. Added native local smoke and bounded end-to-end
+  coverage for formatting, editing, references, recalculation, and undo/redo.
+- Added explicit `ui` and `local` CTest labels. CircleCI continues to run only
+  portable Linux tests and excludes both labels.
+
 - Added portable cell formatting with undo/redo support, compact AppKit ribbon
   controls, and CSV style isolation so CSV files retain values and formulas only.
 - Added raw-content formula editing with Return commit, Escape cancel, function
