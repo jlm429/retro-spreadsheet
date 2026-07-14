@@ -65,8 +65,8 @@ The application is a native macOS AppKit spreadsheet with:
 
 - a 20 row by 10 column worksheet
 - native `NSDocument` open, save, save as, recent document, and dirty handling
-- a compact classic ribbon for font family, size, bold, italic, underline, and horizontal alignment
-- editable `NSTableView` cells plus a raw-content `fx` formula bar with Return commit and Escape cancel
+- a compact classic ribbon for font family, size, bold, italic, underline, and horizontal alignment, applied to the active cell or a Shift-click-selected rectangular range
+- editable `NSTableView` cells plus a raw-content `fx` formula bar where Return commits and Escape restores the original raw content
 - copy, cut, and paste for rectangular cell ranges
 - formulas using direct references, `+`, `-`, `*`, `/`, `SUM(...)`,
   `AVERAGE(...)`, `MIN(...)`, `MAX(...)`, and `COUNT(...)`
@@ -146,6 +146,6 @@ must take a `Workbook::Snapshot` on the main thread, call the pure
 thread and compare the result revision before applying it. AppKit controllers,
 `NSDocument`, and all access to the live `Workbook` remain on the main thread.
 
-The current grid has one active cell. The core supports rectangular text
-selection, paste, and clear operations so the UI can add multi-cell selection
-without moving spreadsheet behavior into AppKit.
+The grid has one active cell. Shift-click another cell to select a rectangular
+range for ribbon formatting, copy, cut, and clear operations; paste begins at
+the active cell.
