@@ -10,9 +10,13 @@ This project uses a conventional C++ desktop application layout.
 - `tests/`: dependency-free C++ core tests. On local macOS AppKit builds, CTest also registers a bounded UI smoke test.
 - `skills/`: project-specific agent guidance.
 
-The core target contains `Workbook` and `FormulaEvaluator`. `Workbook` owns the
-fixed 20 by 10 grid, CSV persistence, undo history, dirty state, and
-recalculation. `FormulaEvaluator` has no UI dependency. `Workbook` is mutable
+The core target contains `Workbook`, `FormulaEvaluator`, and
+`FormulaEditingSession`. `Workbook` owns the fixed 20 by 10 grid, raw values,
+portable cell formatting, CSV persistence, undo history, dirty state, and
+recalculation. CSV deliberately contains raw values and formulas only.
+`FormulaEvaluator` and `FormulaEditingSession` have no UI dependency;
+`FormulaEditingSession` keeps an uncommitted destination, draft, and temporary
+reference range separate from native selection rendering. `Workbook` is mutable
 and main-thread-owned by the current document; it is not safe for concurrent
 access. `Workbook::Snapshot` is a value type and
 `Workbook::evaluateSnapshot()` is a UI-independent calculation seam for future

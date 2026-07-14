@@ -4,6 +4,14 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Added portable cell formatting with undo/redo support, compact AppKit ribbon
+  controls, and CSV style isolation so CSV files retain values and formulas only.
+- Added raw-content formula editing with Return commit, Escape cancel, function
+  templates for SUM, AVERAGE, MIN, MAX, and COUNT, plus cell and rectangular
+  range reference insertion.
+- Expanded the portable evaluator and Linux-safe test suite for MIN, MAX,
+  COUNT, blank ranges, formatting persistence, and formula-entry state.
+
 - Pinned the CircleCI Linux image to a version with CMake newer than the
   project's 3.21 minimum requirement.
 - Moved CircleCI to a Linux executor that configures, builds, and tests only

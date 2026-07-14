@@ -65,14 +65,19 @@ The application is a native macOS AppKit spreadsheet with:
 
 - a 20 row by 10 column worksheet
 - native `NSDocument` open, save, save as, recent document, and dirty handling
-- editable `NSTableView` cells plus an `fx` formula bar
+- a compact classic ribbon for font family, size, bold, italic, underline, and horizontal alignment
+- editable `NSTableView` cells plus a raw-content `fx` formula bar with Return commit and Escape cancel
 - copy, cut, and paste for rectangular cell ranges
-- formulas using direct references, `+`, `-`, `*`, `/`, `SUM(...)`, and
-  `AVERAGE(...)`
+- formulas using direct references, `+`, `-`, `*`, `/`, `SUM(...)`,
+  `AVERAGE(...)`, `MIN(...)`, `MAX(...)`, and `COUNT(...)`
 
-Formula references use spreadsheet-style names such as `A1`. `SUM` and
-`AVERAGE` accept single cells, ranges such as `A1:B3`, and comma-separated
-arguments such as `A1,B1`.
+Formula references use spreadsheet-style names such as `A1`. `SUM`,
+`AVERAGE`, `MIN`, `MAX`, and `COUNT` accept single cells, ranges such as
+`A1:B3`, and comma-separated arguments such as `A1,B1`. The function dropdown
+starts an uncommitted formula template; while editing, clicking or dragging the
+grid inserts one cell or rectangular range reference without changing the
+destination cell. Formatting is in-memory workbook state and is intentionally
+not stored in CSV files.
 
 ---
 
