@@ -17,7 +17,7 @@ jobs:
           name: Core tests without native UI
           command: |
             timeout 30s \
-              ctest --test-dir build --output-on-failure --label-exclude ui --timeout 15
+              ctest --test-dir build --output-on-failure --label-exclude "ui|local" --timeout 15
 workflows:
   build:
     jobs:

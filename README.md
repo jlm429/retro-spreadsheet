@@ -65,8 +65,8 @@ The application is a native macOS AppKit spreadsheet with:
 
 - a 20 row by 10 column worksheet
 - native `NSDocument` open, save, save as, recent document, and dirty handling
-- a compact classic ribbon for font family, size, bold, italic, underline, and horizontal alignment
-- editable `NSTableView` cells plus a raw-content `fx` formula bar with Return commit and Escape cancel
+- a compact classic ribbon for font family, size, bold, italic, underline, and horizontal alignment, applied to the active cell or a Shift-click-selected rectangular range
+- editable `NSTableView` cells plus a raw-content `fx` formula bar where Return commits and Escape restores the original raw content
 - copy, cut, and paste for rectangular cell ranges
 - formulas using direct references, `+`, `-`, `*`, `/`, `SUM(...)`,
   `AVERAGE(...)`, `MIN(...)`, `MAX(...)`, and `COUNT(...)`
@@ -105,27 +105,33 @@ macOS, add `-DRETRO_SPREADSHEET_BUILD_APP=OFF` to the configure command.
 ## Tests
 
 CTest runs the dependency-free C++ engine suite and, on macOS when the AppKit
-application is enabled, registers a separate local UI smoke test. The engine
-suite is the default fast-feedback path and does not launch a GUI or access the
-network. CircleCI uses a Linux executor and configures only the portable core.
-The smoke test remains available for local macOS runs. It launches the app
-bundle, verifies a visible grid, selects A1, edits it, and exits cleanly.
+application is enabled, registers separate local AppKit smoke and end-to-end
+tests. The engine suite is the default fast-feedback path and does not launch a
+GUI or access the network. CircleCI uses a Linux executor and configures only
+the portable core. It explicitly excludes both `ui` and `local` labels.
 
 ```sh
-# Core tests, including unit and integration coverage. This is the CI path.
-ctest --test-dir build --output-on-failure --label-exclude ui --timeout 15
+# Portable tests, including unit and integration coverage. This is the CI path.
+ctest --test-dir build --output-on-failure --label-exclude 'ui|local' --timeout 15
 
 # AppKit smoke test. Run locally in an interactive macOS session.
-ctest --test-dir build --output-on-failure --label-regex ui --timeout 15
+ctest --test-dir build --output-on-failure -R RetroSpreadsheetUiSmoke --timeout 15
+
+# AppKit end-to-end test. Run locally in an interactive macOS session.
+ctest --test-dir build --output-on-failure -R RetroSpreadsheetUiEndToEnd --timeout 20
+
+# All local tests, including portable and AppKit coverage.
+ctest --test-dir build --output-on-failure --timeout 20
 ```
 
 Every CTest process has an explicit timeout. Core tests have a 5-second limit,
-and the UI smoke test has a 10-second limit. CI additionally applies CTest's
-15-second timeout and a 30-second process timeout, so a child process that does
-not terminate cannot hold the job indefinitely. The UI smoke test launches the
-app bundle through Launch Services, waits at most 5 seconds for the window and
-grid, and captures a PNG screenshot plus `failure.txt` in
-`build/ui-test-artifacts` when it fails. A `success.txt` marker prevents a
+the local smoke test has a 10-second limit, and the local end-to-end test has a
+15-second limit. The app launcher itself has a 12-second limit. CI additionally
+applies CTest's 15-second timeout and a 30-second process timeout, so a child
+process that does not terminate cannot hold the job indefinitely. The local UI
+tests launch the app bundle through Launch Services, wait at most 5 seconds for
+the window and grid, and capture diagnostics in `build/ui-test-artifacts` or
+`build/ui-e2e-test-artifacts` on failure. A `success.txt` marker prevents a
 launcher failure from being reported as a passing UI test.
 
 For future expansion, use GoogleTest when a vendored C++ assertion framework
@@ -140,6 +146,6 @@ must take a `Workbook::Snapshot` on the main thread, call the pure
 thread and compare the result revision before applying it. AppKit controllers,
 `NSDocument`, and all access to the live `Workbook` remain on the main thread.
 
-The current grid has one active cell. The core supports rectangular text
-selection, paste, and clear operations so the UI can add multi-cell selection
-without moving spreadsheet behavior into AppKit.
+The grid has one active cell. Shift-click another cell to select a rectangular
+range for ribbon formatting, copy, cut, and clear operations; paste begins at
+the active cell.

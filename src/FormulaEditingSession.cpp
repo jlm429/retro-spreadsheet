@@ -23,7 +23,8 @@ void FormulaEditingSession::begin(Cell destination, const std::string &originalC
 void FormulaEditingSession::beginFunction(Cell destination, const std::string &originalContents, const std::string &functionName)
 {
     begin(destination, originalContents);
-    draft_ = "=" + functionName + "(";
+    draft_.clear();
+    insertFunction(functionName, 0);
 }
 
 bool FormulaEditingSession::isEditing() const { return editing_; }
@@ -42,17 +43,28 @@ void FormulaEditingSession::insertReference(Range range, std::size_t insertionOf
     draft_.insert(insertionOffset, reference);
 }
 
-FormulaEditingSession::Range FormulaEditingSession::referenceRange() const { return referenceRange_; }
+bool FormulaEditingSession::insertFunction(const std::string &functionName, std::size_t insertionOffset)
+{
+    if (!editing_ || !isSupportedFunction(functionName)) return false;
+    insertionOffset = std::min(insertionOffset, draft_.size());
+    const std::string prefix = draft_.empty() ? "=" : "";
+    draft_.insert(insertionOffset, prefix + functionName + "(");
+    return true;
+}
+
+std::optional<FormulaEditingSession::Range> FormulaEditingSession::referenceRange() const { return referenceRange_; }
 
 std::string FormulaEditingSession::commit()
 {
     editing_ = false;
+    referenceRange_.reset();
     return draft_;
 }
 
 std::string FormulaEditingSession::cancel()
 {
     editing_ = false;
+    referenceRange_.reset();
     draft_ = originalContents_;
     return originalContents_;
 }
@@ -66,4 +78,10 @@ std::string FormulaEditingSession::referenceText(Range range)
     const std::string first = columnName(firstColumn) + std::to_string(firstRow + 1);
     const std::string last = columnName(lastColumn) + std::to_string(lastRow + 1);
     return first == last ? first : first + ":" + last;
+}
+
+bool FormulaEditingSession::isSupportedFunction(const std::string &functionName)
+{
+    return functionName == "SUM" || functionName == "AVERAGE" || functionName == "MIN"
+        || functionName == "MAX" || functionName == "COUNT";
 }
