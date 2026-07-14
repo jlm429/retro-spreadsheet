@@ -9,9 +9,10 @@ TEST(FormulaEditingSession_KeepsDestinationSeparateFromReferencedRange)
     REQUIRE(session.destination().row == 4);
     REQUIRE(session.destination().column == 4);
     REQUIRE_EQUAL(session.draft(), "A1:B3old value");
-    REQUIRE_EQUAL(FormulaEditingSession::referenceText(session.referenceRange()), "A1:B3");
+    REQUIRE_EQUAL(FormulaEditingSession::referenceText(*session.referenceRange()), "A1:B3");
     REQUIRE_EQUAL(session.cancel(), "old value");
     REQUIRE(!session.isEditing());
+    REQUIRE(!session.referenceRange());
 }
 
 TEST(FormulaEditingSession_FunctionTemplateCommitsAndEscapesToOriginalContent)
@@ -20,8 +21,10 @@ TEST(FormulaEditingSession_FunctionTemplateCommitsAndEscapesToOriginalContent)
     session.beginFunction({1, 1}, "prior", "COUNT");
     session.insertReference({{3, 2}, {3, 2}}, session.draft().size());
     REQUIRE_EQUAL(session.commit(), "=COUNT(C4");
+    REQUIRE(!session.referenceRange());
     session.beginFunction({1, 1}, "prior", "MAX");
     REQUIRE_EQUAL(session.cancel(), "prior");
+    REQUIRE(!session.referenceRange());
 }
 
 TEST(FormulaEditingSession_TracksDraftReferencesAndNoOpCommitWithoutChangingDestination)

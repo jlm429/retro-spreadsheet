@@ -52,17 +52,19 @@ bool FormulaEditingSession::insertFunction(const std::string &functionName, std:
     return true;
 }
 
-FormulaEditingSession::Range FormulaEditingSession::referenceRange() const { return referenceRange_; }
+std::optional<FormulaEditingSession::Range> FormulaEditingSession::referenceRange() const { return referenceRange_; }
 
 std::string FormulaEditingSession::commit()
 {
     editing_ = false;
+    referenceRange_.reset();
     return draft_;
 }
 
 std::string FormulaEditingSession::cancel()
 {
     editing_ = false;
+    referenceRange_.reset();
     draft_ = originalContents_;
     return originalContents_;
 }

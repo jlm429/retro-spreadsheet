@@ -192,7 +192,7 @@ void writeUiSmokeSuccess()
 - (void)workbookDidChange
 {
     requireMainThread();
-    [self updateChangeCount:NSChangeDone];
+    [self updateChangeCount:_workbook->isModified() ? NSChangeDone : NSChangeCleared];
 }
 @end
 
@@ -473,9 +473,10 @@ void writeUiSmokeSuccess()
 - (BOOL)isReferenceCellAtRow:(NSInteger)row column:(NSInteger)column
 {
     if (!_formulaSession->isEditing()) return NO;
-    const FormulaEditingSession::Range range = _formulaSession->referenceRange();
-    return row >= std::min(range.first.row, range.last.row) && row <= std::max(range.first.row, range.last.row)
-        && column >= std::min(range.first.column, range.last.column) && column <= std::max(range.first.column, range.last.column);
+    const std::optional<FormulaEditingSession::Range> range = _formulaSession->referenceRange();
+    if (!range) return NO;
+    return row >= std::min(range->first.row, range->last.row) && row <= std::max(range->first.row, range->last.row)
+        && column >= std::min(range->first.column, range->last.column) && column <= std::max(range->first.column, range->last.column);
 }
 
 - (BOOL)isFormulaEditing { return _formulaSession->isEditing(); }
@@ -729,6 +730,15 @@ void writeUiSmokeSuccess()
     [self redo:nil];
     [self redo:nil];
     if (!require(workbook->cellFormat(0, 0).alignment == HorizontalAlignment::Right && workbook->rawValue(0, 0) == "5", @"Redo did not preserve formatting and cell edits together.")) return NO;
+
+    [self.workbookDocument updateChangeCount:NSChangeCleared];
+    workbook->markSaved();
+    [self tableView:_table setObjectValue:@"2" forTableColumn:firstColumn row:0];
+    if (!require(self.workbookDocument.isDocumentEdited, @"A workbook edit did not mark the document dirty.")) return NO;
+    [self undo:nil];
+    if (!require(!self.workbookDocument.isDocumentEdited, @"Undo to the saved workbook state left the document dirty.")) return NO;
+    [self redo:nil];
+    if (!require(self.workbookDocument.isDocumentEdited, @"Redo from the saved workbook state did not mark the document dirty.")) return NO;
 
     [self selectCellAtRow:0 column:2];
     if (!require([_formulaBar.stringValue isEqualToString:@"=A1+B1"], @"Formula bar did not return the active cell raw contents after selection.")) return NO;
