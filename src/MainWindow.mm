@@ -357,6 +357,15 @@ void writeUiSmokeSuccess()
     if (notification.object == _formulaBar && _formulaSession->isEditing()) _formulaSession->setDraft(asString(_formulaBar.stringValue));
 }
 
+- (BOOL)control:(NSControl *)control textView:(NSTextView *)textView doCommandBySelector:(SEL)commandSelector
+{
+    if (control == _formulaBar && commandSelector == @selector(cancelOperation:)) {
+        [self cancelFormulaBar];
+        return YES;
+    }
+    return NO;
+}
+
 - (void)controlTextDidEndEditing:(NSNotification *)notification
 {
     if (notification.object != _formulaBar) return;

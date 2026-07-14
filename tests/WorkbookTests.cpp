@@ -168,3 +168,18 @@ TEST(Workbook_AppliesValidatedFormattingToRectangularRangesInOneUndoStep)
     REQUIRE(!workbook.setCellFormat(0, 0, invalid));
     REQUIRE(!workbook.setFormatRange(-4, -4, -1, -1, format));
 }
+
+TEST(Workbook_ClearRemovesFormattingWithoutCellValues)
+{
+    Workbook workbook;
+    CellFormat format;
+    format.bold = true;
+    REQUIRE(workbook.setCellFormat(0, 0, format));
+
+    workbook.clear();
+
+    REQUIRE(workbook.cellFormat(0, 0) == CellFormat{});
+    REQUIRE(workbook.canUndo());
+    REQUIRE(workbook.undo());
+    REQUIRE(workbook.cellFormat(0, 0) == format);
+}

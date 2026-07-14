@@ -22,6 +22,8 @@ void Workbook::clear()
 {
     bool changed = false;
     for (const auto &row : cells_) for (const auto &value : row) if (!value.empty()) { changed = true; break; }
+    if (!changed)
+        for (const auto &row : formats_) for (const auto &format : row) if (format != CellFormat{}) { changed = true; break; }
     if (!changed) return;
     recordUndoState();
     for (auto &row : cells_) std::fill(row.begin(), row.end(), std::string());
