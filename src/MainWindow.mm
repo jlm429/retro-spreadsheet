@@ -13,6 +13,17 @@ NSString *columnName(NSInteger column) { return [NSString stringWithFormat:@"%c"
 }
 
 @class WorkbookDocument;
+@class SpreadsheetWindowController;
+
+@interface SpreadsheetTableView : NSTableView
+@property(nonatomic, assign) SpreadsheetWindowController *spreadsheetController;
+@end
+
+@interface SpreadsheetCellTextField : NSTextField
+@property(nonatomic, assign) SpreadsheetWindowController *spreadsheetController;
+@property(nonatomic) NSInteger spreadsheetRow;
+@property(nonatomic) NSInteger spreadsheetColumn;
+@end
 
 @interface SpreadsheetWindowController : NSWindowController <NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate>
 - (instancetype)initWithDocument:(WorkbookDocument *)document;
@@ -21,6 +32,28 @@ NSString *columnName(NSInteger column) { return [NSString stringWithFormat:@"%c"
 - (IBAction)paste:(id)sender;
 - (IBAction)insertSum:(id)sender;
 - (IBAction)insertAverage:(id)sender;
+- (void)selectCellAtRow:(NSInteger)row column:(NSInteger)column;
+@end
+
+@implementation SpreadsheetTableView
+
+- (void)mouseDown:(NSEvent *)event
+{
+    NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+    const NSInteger row = [self rowAtPoint:point];
+    const NSInteger column = [self columnAtPoint:point];
+    if (row >= 0 && column >= 0) [self.spreadsheetController selectCellAtRow:row column:column];
+    [super mouseDown:event];
+}
+@end
+
+@implementation SpreadsheetCellTextField
+
+- (void)mouseDown:(NSEvent *)event
+{
+    [self.spreadsheetController selectCellAtRow:_spreadsheetRow column:_spreadsheetColumn];
+    [super mouseDown:event];
+}
 @end
 
 @interface WorkbookDocument : NSDocument
@@ -103,6 +136,8 @@ NSString *columnName(NSInteger column) { return [NSString stringWithFormat:@"%c"
 @property(nonatomic, strong) NSTextField *formulaBar;
 @property(nonatomic, strong) NSTextField *statusField;
 @property(nonatomic) BOOL updatingFormulaBar;
+@property(nonatomic) NSInteger activeRow;
+@property(nonatomic) NSInteger activeColumn;
 @end
 
 @implementation SpreadsheetWindowController
@@ -151,9 +186,10 @@ NSString *columnName(NSInteger column) { return [NSString stringWithFormat:@"%c"
 
     NSScrollView *scroll = [[NSScrollView alloc] init];
     scroll.hasVerticalScroller = YES; scroll.hasHorizontalScroller = YES; scroll.borderType = NSBezelBorder;
-    _table = [[NSTableView alloc] init];
-    _table.dataSource = self; _table.delegate = self; _table.allowsMultipleSelection = YES; _table.allowsEmptySelection = NO;
-    _table.allowsColumnSelection = YES; _table.usesAlternatingRowBackgroundColors = YES; _table.rowHeight = 25;
+    _table = [[SpreadsheetTableView alloc] init];
+    static_cast<SpreadsheetTableView *>(_table).spreadsheetController = self;
+    _table.dataSource = self; _table.delegate = self; _table.allowsMultipleSelection = NO; _table.allowsEmptySelection = NO;
+    _table.allowsColumnSelection = NO; _table.usesAlternatingRowBackgroundColors = YES; _table.rowHeight = 25;
     for (NSInteger column = 0; column < Workbook::ColumnCount; ++column) {
         NSTableColumn *tableColumn = [[NSTableColumn alloc] initWithIdentifier:[NSString stringWithFormat:@"%ld", static_cast<long>(column)]];
         tableColumn.title = columnName(column); tableColumn.width = 102; tableColumn.minWidth = 72; tableColumn.editable = YES;
@@ -168,8 +204,9 @@ NSString *columnName(NSInteger column) { return [NSString stringWithFormat:@"%c"
     [statusRow addSubview:_statusField];
     [NSLayoutConstraint activateConstraints:@[[statusRow.heightAnchor constraintEqualToConstant:26], [_statusField.leadingAnchor constraintEqualToAnchor:statusRow.leadingAnchor constant:12], [_statusField.centerYAnchor constraintEqualToAnchor:statusRow.centerYAnchor]]];
     [stack addArrangedSubview:statusRow];
-    [_table selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
-    [_table selectColumnIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
+    _activeRow = 0;
+    _activeColumn = 0;
+    [_table selectRowIndexes:[NSIndexSet indexSetWithIndex:_activeRow] byExtendingSelection:NO];
     [self updateFormulaBar];
 }
 
@@ -177,11 +214,14 @@ NSString *columnName(NSInteger column) { return [NSString stringWithFormat:@"%c"
 
 - (NSView *)tableView:(NSTableView *)tableView viewForTableColumn:(NSTableColumn *)column row:(NSInteger)row
 {
-    NSTextField *cell = [tableView makeViewWithIdentifier:@"SpreadsheetCell" owner:self];
+    SpreadsheetCellTextField *cell = [tableView makeViewWithIdentifier:@"SpreadsheetCell" owner:self];
     if (!cell) {
-        cell = [[NSTextField alloc] init]; cell.identifier = @"SpreadsheetCell"; cell.bordered = NO; cell.backgroundColor = NSColor.clearColor;
+        cell = [[SpreadsheetCellTextField alloc] init]; cell.identifier = @"SpreadsheetCell"; cell.bordered = NO; cell.backgroundColor = NSColor.clearColor;
         cell.lineBreakMode = NSLineBreakByTruncatingTail; cell.editable = YES; cell.selectable = YES;
     }
+    cell.spreadsheetController = self;
+    cell.spreadsheetRow = row;
+    cell.spreadsheetColumn = column.identifier.integerValue;
     cell.stringValue = asNSString([self.workbookDocument workbook]->displayValue(static_cast<int>(row), column.identifier.integerValue));
     return cell;
 }
@@ -193,37 +233,50 @@ NSString *columnName(NSInteger column) { return [NSString stringWithFormat:@"%c"
 
 - (void)tableView:(NSTableView *)tableView setObjectValue:(id)object forTableColumn:(NSTableColumn *)column row:(NSInteger)row
 {
+    [self selectCellAtRow:row column:column.identifier.integerValue];
     Workbook *workbook = self.workbookDocument.workbook;
     workbook->setRawValue(static_cast<int>(row), column.identifier.integerValue, asString(object));
     [self.workbookDocument workbookDidChange]; [tableView reloadData]; [self updateFormulaBar];
 }
 
-- (void)tableViewSelectionDidChange:(NSNotification *)notification { [self updateFormulaBar]; }
+- (void)tableViewSelectionDidChange:(NSNotification *)notification
+{
+    if (_table.selectedRow >= 0) _activeRow = _table.selectedRow;
+    [self updateFormulaBar];
+}
 - (void)controlTextDidEndEditing:(NSNotification *)notification { if (notification.object == _formulaBar) [self commitFormulaBar]; }
+
+- (void)selectCellAtRow:(NSInteger)row column:(NSInteger)column
+{
+    if (row < 0 || row >= Workbook::RowCount || column < 0 || column >= Workbook::ColumnCount) return;
+    _activeRow = row;
+    _activeColumn = column;
+    if (_table.selectedRow != row) [_table selectRowIndexes:[NSIndexSet indexSetWithIndex:row] byExtendingSelection:NO];
+    [self updateFormulaBar];
+}
 
 - (void)updateFormulaBar
 {
-    if (_updatingFormulaBar || _table.selectedRow < 0 || _table.selectedColumn < 0) return;
+    if (_updatingFormulaBar || _activeRow < 0 || _activeColumn < 0) return;
     _updatingFormulaBar = YES;
-    _formulaBar.stringValue = asNSString([self.workbookDocument workbook]->rawValue(static_cast<int>(_table.selectedRow), static_cast<int>(_table.selectedColumn)));
+    _formulaBar.stringValue = asNSString([self.workbookDocument workbook]->rawValue(static_cast<int>(_activeRow), static_cast<int>(_activeColumn)));
+    _statusField.stringValue = [NSString stringWithFormat:@"%@%ld", columnName(_activeColumn), static_cast<long>(_activeRow + 1)];
     _updatingFormulaBar = NO;
 }
 
 - (void)commitFormulaBar
 {
-    if (_table.selectedRow < 0 || _table.selectedColumn < 0) return;
-    [self.workbookDocument workbook]->setRawValue(static_cast<int>(_table.selectedRow), static_cast<int>(_table.selectedColumn), asString(_formulaBar.stringValue));
+    if (_activeRow < 0 || _activeColumn < 0) return;
+    [self.workbookDocument workbook]->setRawValue(static_cast<int>(_activeRow), static_cast<int>(_activeColumn), asString(_formulaBar.stringValue));
     [self.workbookDocument workbookDidChange]; [_table reloadData]; [self updateFormulaBar];
 }
 
 - (void)selectedRangeFirstRow:(NSInteger *)firstRow firstColumn:(NSInteger *)firstColumn lastRow:(NSInteger *)lastRow lastColumn:(NSInteger *)lastColumn
 {
-    NSIndexSet *rows = _table.selectedRowIndexes;
-    NSIndexSet *columns = _table.selectedColumnIndexes;
-    *firstRow = rows.count ? rows.firstIndex : _table.selectedRow;
-    *lastRow = rows.count ? rows.lastIndex : _table.selectedRow;
-    *firstColumn = columns.count ? columns.firstIndex : _table.selectedColumn;
-    *lastColumn = columns.count ? columns.lastIndex : _table.selectedColumn;
+    *firstRow = _activeRow;
+    *lastRow = _activeRow;
+    *firstColumn = _activeColumn;
+    *lastColumn = _activeColumn;
 }
 
 - (IBAction)copy:(id)sender
@@ -248,8 +301,8 @@ NSString *columnName(NSInteger column) { return [NSString stringWithFormat:@"%c"
 - (IBAction)paste:(id)sender
 {
     NSString *text = [NSPasteboard.generalPasteboard stringForType:NSPasteboardTypeString];
-    if (!text || _table.selectedRow < 0 || _table.selectedColumn < 0) return;
-    [self.workbookDocument workbook]->pasteText(static_cast<int>(_table.selectedRow), static_cast<int>(_table.selectedColumn), asString(text));
+    if (!text || _activeRow < 0 || _activeColumn < 0) return;
+    [self.workbookDocument workbook]->pasteText(static_cast<int>(_activeRow), static_cast<int>(_activeColumn), asString(text));
     [self.workbookDocument workbookDidChange]; [_table reloadData]; [self updateFormulaBar];
 }
 
