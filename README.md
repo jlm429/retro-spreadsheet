@@ -11,7 +11,7 @@ This repository explores **Agentic Software Engineering**: using modern AI codin
 The spreadsheet serves as a realistic application for exploring:
 
 - Object-oriented design
-- Qt desktop development
+- native macOS desktop development
 - File I/O
 - Formula evaluation
 - Dependency graphs
@@ -26,10 +26,10 @@ The spreadsheet serves as a realistic application for exploring:
 
 ```
 AGENTS.md                  Repository-wide engineering principles
-CMakeLists.txt             CMake build, app, and Qt Test targets
+CMakeLists.txt             CMake build and app targets
 include/RetroSpreadsheet/  Public headers for app components
 src/                       Application source code
-tests/                     Qt Test regression suites
+tests/                     Retained placeholders for a future test suite
 docs/                      Project documentation
 resources/                 Placeholder directories for future assets
 skills/                    Specialized engineering knowledge
@@ -53,7 +53,7 @@ Examples include:
 - spreadsheet engineering
 - formula evaluation
 - dependency graphs
-- Qt development
+- AppKit development
 
 Keeping repository guidance separate from specialized skills helps minimize context while allowing deeper expertise when needed.
 
@@ -61,13 +61,12 @@ Keeping repository guidance separate from specialized skills helps minimize cont
 
 ## Current Prototype
 
-The application is a Qt Widgets spreadsheet prototype with:
+The application is a native macOS AppKit spreadsheet with:
 
 - a 20 row by 10 column worksheet
-- CSV open, save, save as, and recent file actions
-- dirty workbook tracking with save prompts
-- editable cells plus an `fx` formula bar
-- copy, cut, and paste for contiguous cell ranges
+- native `NSDocument` open, save, save as, recent document, and dirty handling
+- editable `NSTableView` cells plus an `fx` formula bar
+- copy, cut, and paste for rectangular cell ranges
 - formulas using direct references, `+`, `-`, `*`, `/`, `SUM(...)`, and
   `AVERAGE(...)`
 
@@ -80,7 +79,25 @@ arguments such as `A1,B1`.
 ## Technology
 
 - C++17
-- Qt 6 Widgets
+- AppKit and Objective-C++ at the UI boundary
 - CMake
-- CLion
+- Xcode or CLion
 - Git
+
+## Build
+
+This project builds on macOS with Xcode command-line tools and CMake:
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel
+```
+
+The previous tests are retained as placeholders in `tests/`, but CMake and CI
+do not compile or run them until the new test suite is added.
+
+The portable C++17 engine stays synchronous for the current 20×10 workbook.
+It exposes immutable revision-tagged snapshots, per-document serial operation
+queues, cancellation tokens, and main-thread revision checks as safe seams for
+future background operations. AppKit controllers and all live workbook access
+remain on the main thread.
