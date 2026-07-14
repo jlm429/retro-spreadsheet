@@ -31,8 +31,9 @@ std::string FormulaEvaluator::evaluateCell(int row, int column, std::vector<std:
 std::string FormulaEvaluator::evaluateFormula(const std::string &formula, std::vector<std::vector<bool>> &visiting) const
 {
     const std::string upper = uppercase(trim(formula.substr(1)));
-    if (upper.rfind("SUM", 0) == 0) return evaluateAggregate(formula, "SUM", visiting);
-    if (upper.rfind("AVERAGE", 0) == 0) return evaluateAggregate(formula, "AVERAGE", visiting);
+    for (const std::string &function : {"SUM", "AVERAGE", "MIN", "MAX", "COUNT"}) {
+        if (upper.rfind(function + "(", 0) == 0) return evaluateAggregate(formula, function, visiting);
+    }
     static const std::regex reference(R"(^\s*=\s*([A-Za-z]+[1-9][0-9]*)\s*$)");
     static const std::regex binary(R"(^\s*=\s*([A-Za-z]+[1-9][0-9]*)\s*([+\-*/])\s*([A-Za-z]+[1-9][0-9]*)\s*$)");
     std::smatch match;
@@ -63,13 +64,36 @@ std::string FormulaEvaluator::evaluateAggregate(const std::string &formula, cons
     if (!std::regex_match(formula, match, expression)) return "#FORMULA!";
     double total = 0.0;
     int count = 0;
-    if (!evaluateRangeArguments(match[1].str(), visiting, total, count)) return count < 0 ? "#REF!" : "#VALUE!";
+    if (!evaluateRangeArguments(match[1].str(), visiting, total, count, function == "COUNT")) return count < 0 ? "#REF!" : "#VALUE!";
+    if (function == "SUM") return formatNumber(total);
+    if (function == "COUNT") return formatNumber(count);
     if (count == 0) return "#FORMULA!";
-    return formatNumber(function == "SUM" ? total : total / count);
+
+    double result = function == "AVERAGE" ? total / count : 0.0;
+    if (function == "MIN" || function == "MAX") {
+        bool found = false;
+        for (std::stringstream input(match[1].str()); input.good();) {
+            std::string argument;
+            std::getline(input, argument, ',');
+            if (trim(argument).empty()) continue;
+            int firstRow = 0, firstColumn = 0, lastRow = 0, lastColumn = 0;
+            if (!parseRange(argument, firstRow, firstColumn, lastRow, lastColumn)) return "#REF!";
+            for (int row = firstRow; row <= lastRow; ++row) for (int column = firstColumn; column <= lastColumn; ++column) {
+                const std::string text = evaluateCell(row, column, visiting);
+                if (trim(text).empty()) continue;
+                bool ok = false;
+                const double value = numericValue(text, ok);
+                if (!ok) return "#VALUE!";
+                if (!found) { result = value; found = true; }
+                else result = function == "MIN" ? std::min(result, value) : std::max(result, value);
+            }
+        }
+    }
+    return formatNumber(result);
 }
 
 bool FormulaEvaluator::evaluateRangeArguments(const std::string &arguments, std::vector<std::vector<bool>> &visiting,
-                                              double &total, int &count) const
+                                              double &total, int &count, bool ignoreText) const
 {
     std::stringstream input(arguments);
     std::string argument;
@@ -80,9 +104,15 @@ bool FormulaEvaluator::evaluateRangeArguments(const std::string &arguments, std:
         int firstRow = 0, firstColumn = 0, lastRow = 0, lastColumn = 0;
         if (!parseRange(argument, firstRow, firstColumn, lastRow, lastColumn)) { count = -1; return false; }
         for (int row = firstRow; row <= lastRow; ++row) for (int column = firstColumn; column <= lastColumn; ++column) {
+            const std::string value = evaluateCell(row, column, visiting);
+            if (trim(value).empty()) continue;
             bool ok = false;
-            total += numericValue(evaluateCell(row, column, visiting), ok);
-            if (!ok) return false;
+            const double numeric = numericValue(value, ok);
+            if (!ok) {
+                if (ignoreText && value.front() != '#') continue;
+                return false;
+            }
+            total += numeric;
             ++count;
         }
     }

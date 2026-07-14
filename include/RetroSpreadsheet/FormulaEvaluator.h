@@ -20,7 +20,7 @@ private:
     std::string evaluateAggregate(const std::string &formula, const std::string &function,
                                   std::vector<std::vector<bool>> &visiting) const;
     bool evaluateRangeArguments(const std::string &arguments, std::vector<std::vector<bool>> &visiting,
-                                double &total, int &count) const;
+                                double &total, int &count, bool ignoreText) const;
     bool parseReference(const std::string &text, int &row, int &column) const;
     bool parseRange(const std::string &text, int &startRow, int &startColumn,
                     int &endRow, int &endColumn) const;

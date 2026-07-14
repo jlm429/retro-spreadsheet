@@ -10,7 +10,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(RetroSpreadsheetCore STATIC
     src/FormulaEvaluator.cpp
+    src/FormulaEditingSession.cpp
     src/Workbook.cpp
+    include/RetroSpreadsheet/FormulaEditingSession.h
     include/RetroSpreadsheet/FormulaEvaluator.h
     include/RetroSpreadsheet/Workbook.h
 )
@@ -48,6 +50,7 @@ endif()
 if(BUILD_TESTING)
     add_executable(RetroSpreadsheetCoreTests
         tests/FormulaEvaluatorTests.cpp
+        tests/FormulaEditingSessionTests.cpp
         tests/WorkbookTests.cpp
     )
     target_link_libraries(RetroSpreadsheetCoreTests PRIVATE RetroSpreadsheetCore)

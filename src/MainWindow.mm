@@ -1,6 +1,7 @@
 #import <AppKit/AppKit.h>
 
 #include "RetroSpreadsheet/MainWindow.h"
+#include "RetroSpreadsheet/FormulaEditingSession.h"
 #include "RetroSpreadsheet/Workbook.h"
 
 #include <memory>
@@ -68,7 +69,14 @@ void writeUiSmokeSuccess()
 @property(nonatomic) NSInteger spreadsheetColumn;
 @end
 
+@interface FormulaBarTextField : NSTextField
+@property(nonatomic, assign) SpreadsheetWindowController *spreadsheetController;
+@end
+
 @interface SpreadsheetWindowController : NSWindowController <NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate>
+{
+    std::unique_ptr<FormulaEditingSession> _formulaSession;
+}
 - (instancetype)initWithDocument:(WorkbookDocument *)document;
 - (IBAction)copy:(id)sender;
 - (IBAction)cut:(id)sender;
@@ -76,6 +84,10 @@ void writeUiSmokeSuccess()
 - (IBAction)insertSum:(id)sender;
 - (IBAction)insertAverage:(id)sender;
 - (void)selectCellAtRow:(NSInteger)row column:(NSInteger)column;
+- (void)handleCellMouseDownAtRow:(NSInteger)row column:(NSInteger)column event:(NSEvent *)event;
+- (void)cancelFormulaBar;
+- (BOOL)isFormulaEditing;
+- (BOOL)isReferenceCellAtRow:(NSInteger)row column:(NSInteger)column;
 @end
 
 @implementation SpreadsheetTableView
@@ -85,7 +97,8 @@ void writeUiSmokeSuccess()
     NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
     const NSInteger row = [self rowAtPoint:point];
     const NSInteger column = [self columnAtPoint:point];
-    if (row >= 0 && column >= 0) [self.spreadsheetController selectCellAtRow:row column:column];
+    if (row >= 0 && column >= 0) [self.spreadsheetController handleCellMouseDownAtRow:row column:column event:event];
+    if ([self.spreadsheetController isFormulaEditing]) return;
     [super mouseDown:event];
 }
 @end
@@ -94,8 +107,25 @@ void writeUiSmokeSuccess()
 
 - (void)mouseDown:(NSEvent *)event
 {
-    [self.spreadsheetController selectCellAtRow:_spreadsheetRow column:_spreadsheetColumn];
-    [super mouseDown:event];
+    [self.spreadsheetController handleCellMouseDownAtRow:_spreadsheetRow column:_spreadsheetColumn event:event];
+    if (![self.spreadsheetController isReferenceCellAtRow:_spreadsheetRow column:_spreadsheetColumn]) [super mouseDown:event];
+}
+
+- (void)drawRect:(NSRect)dirtyRect
+{
+    [super drawRect:dirtyRect];
+    if ([self.spreadsheetController isReferenceCellAtRow:_spreadsheetRow column:_spreadsheetColumn]) {
+        [NSColor.systemOrangeColor setStroke];
+        NSFrameRectWithWidth(self.bounds, 2.0);
+    }
+}
+@end
+
+@implementation FormulaBarTextField
+- (void)keyDown:(NSEvent *)event
+{
+    if (event.keyCode == 53) { [self.spreadsheetController cancelFormulaBar]; return; }
+    [super keyDown:event];
 }
 @end
 
@@ -156,9 +186,14 @@ void writeUiSmokeSuccess()
 @interface SpreadsheetWindowController ()
 @property(nonatomic, assign) WorkbookDocument *workbookDocument;
 @property(nonatomic, strong) NSTableView *table;
-@property(nonatomic, strong) NSTextField *formulaBar;
+@property(nonatomic, strong) FormulaBarTextField *formulaBar;
 @property(nonatomic, strong) NSTextField *statusField;
+@property(nonatomic, strong) NSPopUpButton *fontFamilyControl;
+@property(nonatomic, strong) NSPopUpButton *fontSizeControl;
+@property(nonatomic, strong) NSSegmentedControl *styleControl;
+@property(nonatomic, strong) NSSegmentedControl *alignmentControl;
 @property(nonatomic) BOOL updatingFormulaBar;
+@property(nonatomic) BOOL discardingFormulaEdit;
 @property(nonatomic) NSInteger activeRow;
 @property(nonatomic) NSInteger activeColumn;
 @end
@@ -173,6 +208,7 @@ void writeUiSmokeSuccess()
     self = [super initWithWindow:window];
     if (self) {
         _workbookDocument = document;
+        _formulaSession = std::make_unique<FormulaEditingSession>();
         window.titleVisibility = NSWindowTitleVisible;
         window.minSize = NSMakeSize(700, 420);
         [self buildInterface];
@@ -193,14 +229,43 @@ void writeUiSmokeSuccess()
         [stack.topAnchor constraintEqualToAnchor:content.topAnchor], [stack.bottomAnchor constraintEqualToAnchor:content.bottomAnchor]
     ]];
 
-    NSView *formulaRow = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 0, 42)];
+    NSView *ribbon = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 0, 34)];
+    ribbon.wantsLayer = YES;
+    ribbon.layer.backgroundColor = NSColor.controlBackgroundColor.CGColor;
+    _fontFamilyControl = [[NSPopUpButton alloc] init];
+    [_fontFamilyControl addItemsWithTitles:@[@"Helvetica", @"Times-Roman", @"Courier"]];
+    _fontFamilyControl.target = self; _fontFamilyControl.action = @selector(changeFontFamily:); _fontFamilyControl.translatesAutoresizingMaskIntoConstraints = NO;
+    _fontSizeControl = [[NSPopUpButton alloc] init];
+    [_fontSizeControl addItemsWithTitles:@[@"10", @"12", @"14", @"18", @"24"]];
+    _fontSizeControl.target = self; _fontSizeControl.action = @selector(changeFontSize:); _fontSizeControl.translatesAutoresizingMaskIntoConstraints = NO;
+    _styleControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+    _styleControl.segmentCount = 3; [_styleControl setLabel:@"B" forSegment:0]; [_styleControl setLabel:@"I" forSegment:1]; [_styleControl setLabel:@"U" forSegment:2];
+    _styleControl.trackingMode = NSSegmentSwitchTrackingSelectAny; _styleControl.target = self; _styleControl.action = @selector(changeStyle:); _styleControl.segmentStyle = NSSegmentStyleSmallSquare; _styleControl.translatesAutoresizingMaskIntoConstraints = NO;
+    _alignmentControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+    _alignmentControl.segmentCount = 3; [_alignmentControl setLabel:@"Left" forSegment:0]; [_alignmentControl setLabel:@"Center" forSegment:1]; [_alignmentControl setLabel:@"Right" forSegment:2];
+    _alignmentControl.trackingMode = NSSegmentSwitchTrackingSelectOne; _alignmentControl.target = self; _alignmentControl.action = @selector(changeAlignment:); _alignmentControl.segmentStyle = NSSegmentStyleSmallSquare; _alignmentControl.translatesAutoresizingMaskIntoConstraints = NO;
+    NSPopUpButton *functions = [[NSPopUpButton alloc] init];
+    [functions addItemsWithTitles:@[@"Functions", @"SUM", @"AVERAGE", @"MIN", @"MAX", @"COUNT"]];
+    functions.target = self; functions.action = @selector(insertFunction:); functions.translatesAutoresizingMaskIntoConstraints = NO;
+    [ribbon addSubview:_fontFamilyControl]; [ribbon addSubview:_fontSizeControl]; [ribbon addSubview:_styleControl]; [ribbon addSubview:_alignmentControl]; [ribbon addSubview:functions];
+    [NSLayoutConstraint activateConstraints:@[
+        [ribbon.heightAnchor constraintEqualToConstant:34], [_fontFamilyControl.leadingAnchor constraintEqualToAnchor:ribbon.leadingAnchor constant:10], [_fontFamilyControl.centerYAnchor constraintEqualToAnchor:ribbon.centerYAnchor],
+        [_fontSizeControl.leadingAnchor constraintEqualToAnchor:_fontFamilyControl.trailingAnchor constant:6], [_fontSizeControl.centerYAnchor constraintEqualToAnchor:ribbon.centerYAnchor],
+        [_styleControl.leadingAnchor constraintEqualToAnchor:_fontSizeControl.trailingAnchor constant:10], [_styleControl.centerYAnchor constraintEqualToAnchor:ribbon.centerYAnchor],
+        [_alignmentControl.leadingAnchor constraintEqualToAnchor:_styleControl.trailingAnchor constant:10], [_alignmentControl.centerYAnchor constraintEqualToAnchor:ribbon.centerYAnchor],
+        [functions.leadingAnchor constraintEqualToAnchor:_alignmentControl.trailingAnchor constant:10], [functions.centerYAnchor constraintEqualToAnchor:ribbon.centerYAnchor]
+    ]];
+    [stack addArrangedSubview:ribbon];
+
+    NSView *formulaRow = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 0, 38)];
     NSTextField *fx = [NSTextField labelWithString:@"fx"];
     fx.font = [NSFont boldSystemFontOfSize:14]; fx.alignment = NSTextAlignmentCenter; fx.translatesAutoresizingMaskIntoConstraints = NO;
-    _formulaBar = [[NSTextField alloc] init];
+    _formulaBar = [[FormulaBarTextField alloc] init];
+    _formulaBar.spreadsheetController = self;
     _formulaBar.placeholderString = @"Enter a value or formula"; _formulaBar.delegate = self; _formulaBar.translatesAutoresizingMaskIntoConstraints = NO;
     [formulaRow addSubview:fx]; [formulaRow addSubview:_formulaBar];
     [NSLayoutConstraint activateConstraints:@[
-        [formulaRow.heightAnchor constraintEqualToConstant:42], [fx.leadingAnchor constraintEqualToAnchor:formulaRow.leadingAnchor constant:12],
+        [formulaRow.heightAnchor constraintEqualToConstant:38], [fx.leadingAnchor constraintEqualToAnchor:formulaRow.leadingAnchor constant:12],
         [fx.widthAnchor constraintEqualToConstant:32], [fx.centerYAnchor constraintEqualToAnchor:formulaRow.centerYAnchor],
         [_formulaBar.leadingAnchor constraintEqualToAnchor:fx.trailingAnchor constant:8], [_formulaBar.trailingAnchor constraintEqualToAnchor:formulaRow.trailingAnchor constant:-12],
         [_formulaBar.centerYAnchor constraintEqualToAnchor:formulaRow.centerYAnchor]
@@ -246,6 +311,16 @@ void writeUiSmokeSuccess()
     cell.spreadsheetRow = row;
     cell.spreadsheetColumn = column.identifier.integerValue;
     cell.stringValue = asNSString([self.workbookDocument workbook]->displayValue(static_cast<int>(row), column.identifier.integerValue));
+    const CellFormat format = [self.workbookDocument workbook]->cellFormat(static_cast<int>(row), column.identifier.integerValue);
+    NSFont *font = [NSFont fontWithName:asNSString(format.fontFamily) size:format.fontSize];
+    if (!font) font = [NSFont systemFontOfSize:format.fontSize];
+    NSFontTraitMask traits = 0;
+    if (format.bold) traits |= NSBoldFontMask;
+    if (format.italic) traits |= NSItalicFontMask;
+    if (traits) font = [[NSFontManager sharedFontManager] convertFont:font toHaveTrait:traits];
+    cell.font = font;
+    cell.alignment = format.alignment == HorizontalAlignment::Center ? NSTextAlignmentCenter : format.alignment == HorizontalAlignment::Right ? NSTextAlignmentRight : NSTextAlignmentLeft;
+    if (format.underline) cell.attributedStringValue = [[NSAttributedString alloc] initWithString:cell.stringValue attributes:@{NSFontAttributeName: font, NSUnderlineStyleAttributeName: @(NSUnderlineStyleSingle)}];
     return cell;
 }
 
@@ -270,7 +345,24 @@ void writeUiSmokeSuccess()
     if (_table.selectedRow >= 0) _activeRow = _table.selectedRow;
     [self updateFormulaBar];
 }
-- (void)controlTextDidEndEditing:(NSNotification *)notification { if (notification.object == _formulaBar) [self commitFormulaBar]; }
+- (void)controlTextDidBeginEditing:(NSNotification *)notification
+{
+    if (notification.object == _formulaBar && !_formulaSession->isEditing()) {
+        _formulaSession->begin({static_cast<int>(_activeRow), static_cast<int>(_activeColumn)}, asString(_formulaBar.stringValue));
+    }
+}
+
+- (void)controlTextDidChange:(NSNotification *)notification
+{
+    if (notification.object == _formulaBar && _formulaSession->isEditing()) _formulaSession->setDraft(asString(_formulaBar.stringValue));
+}
+
+- (void)controlTextDidEndEditing:(NSNotification *)notification
+{
+    if (notification.object != _formulaBar) return;
+    if (_discardingFormulaEdit) { _discardingFormulaEdit = NO; return; }
+    [self commitFormulaBar];
+}
 
 - (void)selectCellAtRow:(NSInteger)row column:(NSInteger)column
 {
@@ -281,24 +373,99 @@ void writeUiSmokeSuccess()
     [self updateFormulaBar];
 }
 
+- (void)handleCellMouseDownAtRow:(NSInteger)row column:(NSInteger)column event:(NSEvent *)event
+{
+    if (!_formulaSession->isEditing()) { [self selectCellAtRow:row column:column]; return; }
+    FormulaEditingSession::Range range{{static_cast<int>(row), static_cast<int>(column)}, {static_cast<int>(row), static_cast<int>(column)}};
+    NSEvent *next = event;
+    while (next.type != NSEventTypeLeftMouseUp) {
+        next = [self.window nextEventMatchingMask:NSEventMaskLeftMouseDragged | NSEventMaskLeftMouseUp untilDate:NSDate.distantFuture inMode:NSEventTrackingRunLoopMode dequeue:YES];
+        if (!next) break;
+        NSPoint point = [_table convertPoint:next.locationInWindow fromView:nil];
+        const NSInteger draggedRow = [_table rowAtPoint:point];
+        const NSInteger draggedColumn = [_table columnAtPoint:point];
+        if (draggedRow >= 0 && draggedColumn >= 0) {
+            range.last = {static_cast<int>(draggedRow), static_cast<int>(draggedColumn)};
+            _formulaSession->setReferenceRange(range);
+            [_table reloadData];
+        }
+    }
+    _formulaSession->insertReference(range, _formulaSession->draft().size());
+    _formulaBar.stringValue = asNSString(_formulaSession->draft());
+    NSTextView *editor = static_cast<NSTextView *>(_formulaBar.currentEditor);
+    editor.selectedRange = NSMakeRange(_formulaBar.stringValue.length, 0);
+    [self.window makeFirstResponder:_formulaBar];
+    [_table reloadData];
+}
+
+- (BOOL)isReferenceCellAtRow:(NSInteger)row column:(NSInteger)column
+{
+    if (!_formulaSession->isEditing()) return NO;
+    const FormulaEditingSession::Range range = _formulaSession->referenceRange();
+    return row >= std::min(range.first.row, range.last.row) && row <= std::max(range.first.row, range.last.row)
+        && column >= std::min(range.first.column, range.last.column) && column <= std::max(range.first.column, range.last.column);
+}
+
+- (BOOL)isFormulaEditing { return _formulaSession->isEditing(); }
+
 - (void)updateFormulaBar
 {
-    if (_updatingFormulaBar || _activeRow < 0 || _activeColumn < 0) return;
+    if (_updatingFormulaBar || _formulaSession->isEditing() || _activeRow < 0 || _activeColumn < 0) return;
     _updatingFormulaBar = YES;
     _formulaBar.stringValue = asNSString([self.workbookDocument workbook]->rawValue(static_cast<int>(_activeRow), static_cast<int>(_activeColumn)));
     _statusField.stringValue = [NSString stringWithFormat:@"%@%ld", columnName(_activeColumn), static_cast<long>(_activeRow + 1)];
     _updatingFormulaBar = NO;
+    [self updateRibbonControls];
 }
 
 - (void)commitFormulaBar
 {
     if (_activeRow < 0 || _activeColumn < 0) return;
-    if ([self.workbookDocument workbook]->setRawValue(static_cast<int>(_activeRow), static_cast<int>(_activeColumn), asString(_formulaBar.stringValue))) {
+    const FormulaEditingSession::Cell destination = _formulaSession->isEditing()
+        ? _formulaSession->destination() : FormulaEditingSession::Cell{static_cast<int>(_activeRow), static_cast<int>(_activeColumn)};
+    const std::string value = _formulaSession->isEditing() ? _formulaSession->commit() : asString(_formulaBar.stringValue);
+    _formulaBar.stringValue = asNSString(value);
+    _activeRow = destination.row;
+    _activeColumn = destination.column;
+    if ([self.workbookDocument workbook]->setRawValue(destination.row, destination.column, value)) {
         [self.workbookDocument workbookDidChange];
         [_table reloadData];
         [self updateFormulaBar];
     }
 }
+
+- (void)cancelFormulaBar
+{
+    if (!_formulaSession->isEditing()) return;
+    _discardingFormulaEdit = YES;
+    _formulaBar.stringValue = asNSString(_formulaSession->cancel());
+    [_table reloadData];
+    [self.window makeFirstResponder:_table];
+    [self updateFormulaBar];
+}
+
+- (void)updateRibbonControls
+{
+    if (_activeRow < 0 || _activeColumn < 0) return;
+    const CellFormat format = [self.workbookDocument workbook]->cellFormat(static_cast<int>(_activeRow), static_cast<int>(_activeColumn));
+    [_fontFamilyControl selectItemWithTitle:asNSString(format.fontFamily)];
+    [_fontSizeControl selectItemWithTitle:[NSString stringWithFormat:@"%.0f", format.fontSize]];
+    [_styleControl setSelected:format.bold forSegment:0]; [_styleControl setSelected:format.italic forSegment:1]; [_styleControl setSelected:format.underline forSegment:2];
+    [_alignmentControl setSelected:YES forSegment:format.alignment == HorizontalAlignment::Left ? 0 : format.alignment == HorizontalAlignment::Center ? 1 : 2];
+}
+
+- (void)applyFormat:(const CellFormat &)format
+{
+    if ([self.workbookDocument workbook]->setCellFormat(static_cast<int>(_activeRow), static_cast<int>(_activeColumn), format)) {
+        [self.workbookDocument workbookDidChange];
+        [_table reloadData];
+    }
+}
+
+- (IBAction)changeFontFamily:(id)sender { CellFormat format = [self.workbookDocument workbook]->cellFormat(_activeRow, _activeColumn); format.fontFamily = asString(_fontFamilyControl.titleOfSelectedItem); [self applyFormat:format]; }
+- (IBAction)changeFontSize:(id)sender { CellFormat format = [self.workbookDocument workbook]->cellFormat(_activeRow, _activeColumn); format.fontSize = _fontSizeControl.titleOfSelectedItem.doubleValue; [self applyFormat:format]; }
+- (IBAction)changeStyle:(id)sender { CellFormat format = [self.workbookDocument workbook]->cellFormat(_activeRow, _activeColumn); format.bold = [_styleControl isSelectedForSegment:0]; format.italic = [_styleControl isSelectedForSegment:1]; format.underline = [_styleControl isSelectedForSegment:2]; [self applyFormat:format]; }
+- (IBAction)changeAlignment:(id)sender { CellFormat format = [self.workbookDocument workbook]->cellFormat(_activeRow, _activeColumn); format.alignment = _alignmentControl.selectedSegment == 1 ? HorizontalAlignment::Center : _alignmentControl.selectedSegment == 2 ? HorizontalAlignment::Right : HorizontalAlignment::Left; [self applyFormat:format]; }
 
 - (void)selectedRangeFirstRow:(NSInteger *)firstRow firstColumn:(NSInteger *)firstColumn lastRow:(NSInteger *)lastRow lastColumn:(NSInteger *)lastColumn
 {
@@ -341,9 +508,26 @@ void writeUiSmokeSuccess()
     }
 }
 
-- (IBAction)insertSum:(id)sender { [self beginFormula:@"=SUM("]; }
-- (IBAction)insertAverage:(id)sender { [self beginFormula:@"=AVERAGE("]; }
-- (void)beginFormula:(NSString *)prefix { _formulaBar.stringValue = prefix; [self.window makeFirstResponder:_formulaBar]; }
+- (IBAction)insertSum:(id)sender { [self beginFunction:@"SUM"]; }
+- (IBAction)insertAverage:(id)sender { [self beginFunction:@"AVERAGE"]; }
+- (IBAction)insertFunction:(id)sender
+{
+    NSString *function = static_cast<NSPopUpButton *>(sender).titleOfSelectedItem;
+    if ([function isEqualToString:@"Functions"]) return;
+    [self beginFunction:function];
+    [static_cast<NSPopUpButton *>(sender) selectItemAtIndex:0];
+}
+
+- (void)beginFunction:(NSString *)function
+{
+    const FormulaEditingSession::Cell destination{static_cast<int>(_activeRow), static_cast<int>(_activeColumn)};
+    _formulaSession->beginFunction(destination, [self.workbookDocument workbook]->rawValue(destination.row, destination.column), asString(function));
+    _formulaBar.stringValue = asNSString(_formulaSession->draft());
+    [self.window makeFirstResponder:_formulaBar];
+    NSTextView *editor = static_cast<NSTextView *>(_formulaBar.currentEditor);
+    editor.selectedRange = NSMakeRange(_formulaBar.stringValue.length, 0);
+    _statusField.stringValue = [NSString stringWithFormat:@"Editing %@", asNSString(FormulaEditingSession::referenceText({destination, destination}))];
+}
 @end
 
 @interface AppDelegate : NSObject <NSApplicationDelegate>

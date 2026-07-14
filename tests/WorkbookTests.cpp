@@ -105,3 +105,66 @@ TEST(Workbook_NoOpMutationsDoNotCreateUndoHistory)
     REQUIRE(!workbook.pasteText(0, 0, ""));
     REQUIRE(!workbook.canUndo());
 }
+
+TEST(Workbook_PreservesPortableCellFormattingThroughUndoRedoAndRecalculation)
+{
+    Workbook workbook;
+    CellFormat format;
+    format.fontFamily = "Courier";
+    format.fontSize = 14.0;
+    format.bold = true;
+    format.italic = true;
+    format.underline = true;
+    format.alignment = HorizontalAlignment::Center;
+
+    REQUIRE(workbook.setCellFormat(0, 0, format));
+    workbook.setRawValue(0, 0, "2");
+    workbook.setRawValue(0, 1, "=A1");
+    REQUIRE(workbook.cellFormat(0, 0) == format);
+    REQUIRE_EQUAL(workbook.displayValue(0, 1), "2");
+    REQUIRE(workbook.undo());
+    REQUIRE(workbook.undo());
+    REQUIRE(workbook.cellFormat(0, 0) == format);
+    REQUIRE(workbook.undo());
+    REQUIRE(workbook.cellFormat(0, 0) == CellFormat{});
+    REQUIRE(workbook.redo());
+    REQUIRE(workbook.cellFormat(0, 0) == format);
+}
+
+TEST(Workbook_CsvDoesNotPersistFormatting)
+{
+    const std::filesystem::path path = std::filesystem::temp_directory_path() / "retro-spreadsheet-format-test.csv";
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+    Workbook source;
+    CellFormat format;
+    format.bold = true;
+    format.alignment = HorizontalAlignment::Right;
+    source.setRawValue(0, 0, "=SUM(B1:B1)");
+    source.setCellFormat(0, 0, format);
+    std::string error;
+    REQUIRE(source.saveCsv(path.string(), &error));
+    Workbook reloaded;
+    REQUIRE(reloaded.loadCsv(path.string(), &error));
+    REQUIRE_EQUAL(reloaded.rawValue(0, 0), "=SUM(B1:B1)");
+    REQUIRE(reloaded.cellFormat(0, 0) == CellFormat{});
+    std::filesystem::remove(path, ignored);
+}
+
+TEST(Workbook_AppliesValidatedFormattingToRectangularRangesInOneUndoStep)
+{
+    Workbook workbook;
+    CellFormat format;
+    format.fontFamily = "Times-Roman";
+    format.fontSize = 18.0;
+    format.alignment = HorizontalAlignment::Right;
+    REQUIRE(workbook.setFormatRange(0, 0, 1, 1, format));
+    REQUIRE(workbook.cellFormat(1, 1) == format);
+    REQUIRE(workbook.cellFormat(2, 2) == CellFormat{});
+    REQUIRE(workbook.undo());
+    REQUIRE(workbook.cellFormat(0, 0) == CellFormat{});
+    CellFormat invalid = format;
+    invalid.fontSize = 0.0;
+    REQUIRE(!workbook.setCellFormat(0, 0, invalid));
+    REQUIRE(!workbook.setFormatRange(-4, -4, -1, -1, format));
+}
