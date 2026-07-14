@@ -4,8 +4,9 @@
 #include "RetroSpreadsheet/FormulaEditingSession.h"
 #include "RetroSpreadsheet/Workbook.h"
 
-#include <memory>
+#include <algorithm>
 #include <cstdlib>
+#include <memory>
 
 namespace {
 NSString *asNSString(const std::string &value) { return [NSString stringWithUTF8String:value.c_str()]; }
@@ -52,6 +53,13 @@ void writeUiSmokeSuccess()
     if (!directory) return;
     NSString *path = [NSString stringWithUTF8String:directory];
     [[NSFileManager defaultManager] createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:nil];
+    NSWindow *window = frontWindow();
+    if (window) {
+        NSView *content = window.contentView;
+        NSBitmapImageRep *image = [content bitmapImageRepForCachingDisplayInRect:content.bounds];
+        [content cacheDisplayInRect:content.bounds toBitmapImageRep:image];
+        [[image representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:[path stringByAppendingPathComponent:@"success.png"] atomically:YES];
+    }
     [@"PASS\n" writeToFile:[path stringByAppendingPathComponent:@"success.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
 }
