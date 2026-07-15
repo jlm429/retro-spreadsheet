@@ -74,6 +74,8 @@ void writeUiSmokeSuccess()
 @end
 
 @interface SpreadsheetRowHeaderView : NSView
+@property(nonatomic) CGFloat tableHeaderHeight;
+@property(nonatomic) CGFloat rowHeight;
 - (NSString *)textForRow:(NSInteger)row;
 @end
 
@@ -120,6 +122,8 @@ void writeUiSmokeSuccess()
 - (BOOL)isActiveCellAtRow:(NSInteger)row column:(NSInteger)column;
 - (BOOL)runEndToEndCheck:(NSString **)failure;
 - (void)configureCell:(SpreadsheetCellTextField *)cell row:(NSInteger)row column:(NSInteger)column includeValue:(BOOL)includeValue;
+- (void)syncRowHeaderGeometry;
+- (void)tableHeaderFrameDidChange:(NSNotification *)notification;
 @end
 
 @implementation SpreadsheetTableView
@@ -182,8 +186,8 @@ void writeUiSmokeSuccess()
 {
     [NSColor.controlBackgroundColor setFill];
     NSRectFill(dirtyRect);
-    const CGFloat headerHeight = 27.0;
-    const CGFloat rowHeight = 27.0;
+    const CGFloat headerHeight = _tableHeaderHeight;
+    const CGFloat rowHeight = _rowHeight;
     const NSInteger firstRow = std::max<NSInteger>(0, static_cast<NSInteger>(std::floor((NSMinY(dirtyRect) - headerHeight) / rowHeight)));
     const NSInteger lastRow = std::min<NSInteger>(Workbook::RowCount - 1, static_cast<NSInteger>(std::ceil((NSMaxY(dirtyRect) - headerHeight) / rowHeight)));
     NSDictionary *attributes = @{NSFontAttributeName: [NSFont systemFontOfSize:12], NSForegroundColorAttributeName: NSColor.secondaryLabelColor};
@@ -358,7 +362,7 @@ void writeUiSmokeSuccess()
     gridRow.spacing = 0;
     NSScrollView *rowHeaderScroll = [[NSScrollView alloc] init];
     rowHeaderScroll.hasVerticalScroller = NO; rowHeaderScroll.hasHorizontalScroller = NO; rowHeaderScroll.borderType = NSBezelBorder;
-    _rowHeaderView = [[SpreadsheetRowHeaderView alloc] initWithFrame:NSMakeRect(0, 0, 42, 27 + Workbook::RowCount * 27)];
+    _rowHeaderView = [[SpreadsheetRowHeaderView alloc] initWithFrame:NSMakeRect(0, 0, 42, 0)];
     rowHeaderScroll.documentView = _rowHeaderView;
     [rowHeaderScroll.widthAnchor constraintEqualToConstant:42].active = YES;
 
@@ -379,6 +383,9 @@ void writeUiSmokeSuccess()
     _rowHeaderScroll = rowHeaderScroll;
     scroll.contentView.postsBoundsChangedNotifications = YES;
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(worksheetScrollDidChange:) name:NSViewBoundsDidChangeNotification object:scroll.contentView];
+    _table.headerView.postsFrameChangedNotifications = YES;
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(tableHeaderFrameDidChange:) name:NSViewFrameDidChangeNotification object:_table.headerView];
+    [self syncRowHeaderGeometry];
     [gridRow addArrangedSubview:rowHeaderScroll];
     [gridRow addArrangedSubview:scroll];
     [stack addArrangedSubview:gridRow];
@@ -414,6 +421,21 @@ void writeUiSmokeSuccess()
     origin.y = _worksheetScroll.contentView.bounds.origin.y;
     [_rowHeaderScroll.contentView scrollToPoint:origin];
     [_rowHeaderScroll reflectScrolledClipView:_rowHeaderScroll.contentView];
+}
+
+- (void)tableHeaderFrameDidChange:(NSNotification *)notification
+{
+    [self syncRowHeaderGeometry];
+}
+
+- (void)syncRowHeaderGeometry
+{
+    const CGFloat headerHeight = _table.headerView.bounds.size.height;
+    const CGFloat rowHeight = _table.rowHeight + _table.intercellSpacing.height;
+    _rowHeaderView.tableHeaderHeight = headerHeight;
+    _rowHeaderView.rowHeight = rowHeight;
+    _rowHeaderView.frame = NSMakeRect(0, 0, 42, headerHeight + Workbook::RowCount * rowHeight);
+    [_rowHeaderView setNeedsDisplay:YES];
 }
 
 - (void)configureCell:(SpreadsheetCellTextField *)cell row:(NSInteger)row column:(NSInteger)column includeValue:(BOOL)includeValue
@@ -795,7 +817,8 @@ void writeUiSmokeSuccess()
     [self handleCellMouseDownAtRow:0 column:0 event:click];
     [self handleCellDragEvent:drag];
     if (!require([self isSelectedCellAtRow:1 column:2] && ![self isSelectedCellAtRow:2 column:2], @"Dragging a logical range did not select only its rectangle.")) return NO;
-    if (!require(_rowHeaderView.bounds.size.height >= 27 + Workbook::RowCount * 27, @"One-based row headers were not created for every worksheet row.")) return NO;
+    if (!require(std::abs(_rowHeaderView.bounds.size.height - (_table.headerView.bounds.size.height + Workbook::RowCount * (_table.rowHeight + _table.intercellSpacing.height))) < 0.1,
+            @"Row header geometry did not match the table header and row heights.")) return NO;
     if (!require([[_rowHeaderView textForRow:0] isEqualToString:@"1"], @"The first row header was not one-based.")) return NO;
     [_worksheetScroll.contentView scrollToPoint:NSMakePoint(0, 25)];
     [self worksheetScrollDidChange:nil];
