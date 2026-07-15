@@ -2,6 +2,7 @@
 
 #include "RetroSpreadsheet/MainWindow.h"
 #include "RetroSpreadsheet/FormulaEditingSession.h"
+#include "RetroSpreadsheet/SelectionModel.h"
 #include "RetroSpreadsheet/Workbook.h"
 
 #include <algorithm>
@@ -82,9 +83,25 @@ void writeUiSmokeSuccess()
 @property(nonatomic, assign) SpreadsheetWindowController *spreadsheetController;
 @end
 
+// Ribbon controls deliberately do not become first responder when clicked.
+// Their actions still fire, but a click cannot cause AppKit to end a grid or
+// formula-bar edit before the explicit action has been translated.
+@interface RibbonSegmentedControl : NSSegmentedControl
+@end
+@implementation RibbonSegmentedControl
+- (BOOL)acceptsFirstResponder { return NO; }
+@end
+
+@interface RibbonPopUpButton : NSPopUpButton
+@end
+@implementation RibbonPopUpButton
+- (BOOL)acceptsFirstResponder { return NO; }
+@end
+
 @interface SpreadsheetWindowController : NSWindowController <NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate>
 {
     std::unique_ptr<FormulaEditingSession> _formulaSession;
+    SelectionModel _selection;
 }
 - (instancetype)initWithDocument:(WorkbookDocument *)document;
 - (IBAction)copy:(id)sender;
@@ -101,6 +118,7 @@ void writeUiSmokeSuccess()
 - (BOOL)isFormulaEditing;
 - (BOOL)isReferenceCellAtRow:(NSInteger)row column:(NSInteger)column;
 - (BOOL)runEndToEndCheck:(NSString **)failure;
+- (void)configureCell:(SpreadsheetCellTextField *)cell row:(NSInteger)row column:(NSInteger)column includeValue:(BOOL)includeValue;
 @end
 
 @implementation SpreadsheetTableView
@@ -250,19 +268,19 @@ void writeUiSmokeSuccess()
     NSView *ribbon = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 0, 34)];
     ribbon.wantsLayer = YES;
     ribbon.layer.backgroundColor = NSColor.controlBackgroundColor.CGColor;
-    _fontFamilyControl = [[NSPopUpButton alloc] init];
+    _fontFamilyControl = [[RibbonPopUpButton alloc] init];
     [_fontFamilyControl addItemsWithTitles:@[@"Helvetica", @"Times-Roman", @"Courier"]];
     _fontFamilyControl.target = self; _fontFamilyControl.action = @selector(changeFontFamily:); _fontFamilyControl.translatesAutoresizingMaskIntoConstraints = NO;
-    _fontSizeControl = [[NSPopUpButton alloc] init];
+    _fontSizeControl = [[RibbonPopUpButton alloc] init];
     [_fontSizeControl addItemsWithTitles:@[@"10", @"12", @"14", @"18", @"24"]];
     _fontSizeControl.target = self; _fontSizeControl.action = @selector(changeFontSize:); _fontSizeControl.translatesAutoresizingMaskIntoConstraints = NO;
-    _styleControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+    _styleControl = [[RibbonSegmentedControl alloc] initWithFrame:NSZeroRect];
     _styleControl.segmentCount = 3; [_styleControl setLabel:@"B" forSegment:0]; [_styleControl setLabel:@"I" forSegment:1]; [_styleControl setLabel:@"U" forSegment:2];
     _styleControl.trackingMode = NSSegmentSwitchTrackingSelectAny; _styleControl.target = self; _styleControl.action = @selector(changeStyle:); _styleControl.segmentStyle = NSSegmentStyleSmallSquare; _styleControl.translatesAutoresizingMaskIntoConstraints = NO;
-    _alignmentControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+    _alignmentControl = [[RibbonSegmentedControl alloc] initWithFrame:NSZeroRect];
     _alignmentControl.segmentCount = 3; [_alignmentControl setLabel:@"Left" forSegment:0]; [_alignmentControl setLabel:@"Center" forSegment:1]; [_alignmentControl setLabel:@"Right" forSegment:2];
     _alignmentControl.trackingMode = NSSegmentSwitchTrackingSelectOne; _alignmentControl.target = self; _alignmentControl.action = @selector(changeAlignment:); _alignmentControl.segmentStyle = NSSegmentStyleSmallSquare; _alignmentControl.translatesAutoresizingMaskIntoConstraints = NO;
-    _functionControl = [[NSPopUpButton alloc] init];
+    _functionControl = [[RibbonPopUpButton alloc] init];
     [_functionControl addItemsWithTitles:@[@"Functions", @"SUM", @"AVERAGE", @"MIN", @"MAX", @"COUNT"]];
     _functionControl.target = self; _functionControl.action = @selector(insertFunction:); _functionControl.translatesAutoresizingMaskIntoConstraints = NO;
     [ribbon addSubview:_fontFamilyControl]; [ribbon addSubview:_fontSizeControl]; [ribbon addSubview:_styleControl]; [ribbon addSubview:_alignmentControl]; [ribbon addSubview:_functionControl];
@@ -316,6 +334,7 @@ void writeUiSmokeSuccess()
     _selectionAnchorColumn = 0;
     _selectionLastRow = 0;
     _selectionLastColumn = 0;
+    _selection = SelectionModel({0, 0});
     [_table selectRowIndexes:[NSIndexSet indexSetWithIndex:_activeRow] byExtendingSelection:NO];
     [self updateFormulaBar];
 }
@@ -329,11 +348,17 @@ void writeUiSmokeSuccess()
         cell = [[SpreadsheetCellTextField alloc] init]; cell.identifier = @"SpreadsheetCell"; cell.bordered = NO; cell.backgroundColor = NSColor.clearColor;
         cell.lineBreakMode = NSLineBreakByTruncatingTail; cell.editable = YES; cell.selectable = YES; cell.delegate = self;
     }
+    [self configureCell:cell row:row column:column.identifier.integerValue includeValue:YES];
+    return cell;
+}
+
+- (void)configureCell:(SpreadsheetCellTextField *)cell row:(NSInteger)row column:(NSInteger)column includeValue:(BOOL)includeValue
+{
     cell.spreadsheetController = self;
     cell.spreadsheetRow = row;
-    cell.spreadsheetColumn = column.identifier.integerValue;
-    cell.stringValue = asNSString([self.workbookDocument workbook]->displayValue(static_cast<int>(row), column.identifier.integerValue));
-    const CellFormat format = [self.workbookDocument workbook]->cellFormat(static_cast<int>(row), column.identifier.integerValue);
+    cell.spreadsheetColumn = column;
+    if (includeValue) cell.stringValue = asNSString([self.workbookDocument workbook]->displayValue(static_cast<int>(row), static_cast<int>(column)));
+    const CellFormat format = [self.workbookDocument workbook]->cellFormat(static_cast<int>(row), static_cast<int>(column));
     NSFont *font = [NSFont fontWithName:asNSString(format.fontFamily) size:format.fontSize];
     if (!font) font = [NSFont systemFontOfSize:format.fontSize];
     NSFontTraitMask traits = 0;
@@ -343,7 +368,7 @@ void writeUiSmokeSuccess()
     cell.font = font;
     cell.alignment = format.alignment == HorizontalAlignment::Center ? NSTextAlignmentCenter : format.alignment == HorizontalAlignment::Right ? NSTextAlignmentRight : NSTextAlignmentLeft;
     if (format.underline) cell.attributedStringValue = [[NSAttributedString alloc] initWithString:cell.stringValue attributes:@{NSFontAttributeName: font, NSUnderlineStyleAttributeName: @(NSUnderlineStyleSingle)}];
-    return cell;
+    else cell.attributedStringValue = [[NSAttributedString alloc] initWithString:cell.stringValue attributes:@{NSFontAttributeName: font}];
 }
 
 - (id)tableView:(NSTableView *)tableView objectValueForTableColumn:(NSTableColumn *)column row:(NSInteger)row
@@ -364,8 +389,9 @@ void writeUiSmokeSuccess()
 
 - (void)tableViewSelectionDidChange:(NSNotification *)notification
 {
-    if (_table.selectedRow >= 0) _activeRow = _table.selectedRow;
-    [self updateFormulaBar];
+    // NSTableView tracks rows only. Its reload and responder notifications can
+    // report a stale row, so logical cell selection is updated only by explicit
+    // grid interaction above.
 }
 - (void)controlTextDidBeginEditing:(NSNotification *)notification
 {
@@ -421,6 +447,7 @@ void writeUiSmokeSuccess()
     _selectionAnchorColumn = column;
     _selectionLastRow = row;
     _selectionLastColumn = column;
+    _selection.select({static_cast<int>(row), static_cast<int>(column)});
     if (_table.selectedRow != row) [_table selectRowIndexes:[NSIndexSet indexSetWithIndex:row] byExtendingSelection:NO];
     [self updateFormulaBar];
 }
@@ -433,6 +460,7 @@ void writeUiSmokeSuccess()
             _activeColumn = column;
             _selectionLastRow = row;
             _selectionLastColumn = column;
+            _selection.extendTo({static_cast<int>(row), static_cast<int>(column)});
             const NSInteger firstRow = std::min(_selectionAnchorRow, row);
             const NSInteger lastRow = std::max(_selectionAnchorRow, row);
             [_table selectRowIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(firstRow, lastRow - firstRow + 1)] byExtendingSelection:NO];
@@ -533,13 +561,21 @@ void writeUiSmokeSuccess()
 
 - (void)applyFormat:(const CellFormat &)format
 {
-    if (_formulaSession->isEditing()) return;
-    NSInteger firstRow, firstColumn, lastRow, lastColumn;
-    [self selectedRangeFirstRow:&firstRow firstColumn:&firstColumn lastRow:&lastRow lastColumn:&lastColumn];
+    // Capture the logical selection before an AppKit control can affect visual
+    // focus. Formatting never commits or cancels a cell/formula edit.
+    const SelectionModel::Range selection = _selection.range();
+    const NSInteger firstRow = selection.first.row;
+    const NSInteger firstColumn = selection.first.column;
+    const NSInteger lastRow = selection.last.row;
+    const NSInteger lastColumn = selection.last.column;
     if ([self.workbookDocument workbook]->setFormatRange(static_cast<int>(firstRow), static_cast<int>(firstColumn), static_cast<int>(lastRow), static_cast<int>(lastColumn), format)) {
         [self.workbookDocument workbookDidChange];
-        [_table reloadData];
-        [self updateFormulaBar];
+        for (NSInteger row = firstRow; row <= lastRow; ++row) for (NSInteger column = firstColumn; column <= lastColumn; ++column) {
+            SpreadsheetCellTextField *cell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:column row:row makeIfNecessary:NO]);
+            if (cell) [self configureCell:cell row:row column:column includeValue:NO];
+        }
+        [_table setNeedsDisplay:YES];
+        [self updateRibbonControls];
     }
 }
 
@@ -550,10 +586,11 @@ void writeUiSmokeSuccess()
 
 - (void)selectedRangeFirstRow:(NSInteger *)firstRow firstColumn:(NSInteger *)firstColumn lastRow:(NSInteger *)lastRow lastColumn:(NSInteger *)lastColumn
 {
-    *firstRow = std::min(_selectionAnchorRow, _selectionLastRow);
-    *lastRow = std::max(_selectionAnchorRow, _selectionLastRow);
-    *firstColumn = std::min(_selectionAnchorColumn, _selectionLastColumn);
-    *lastColumn = std::max(_selectionAnchorColumn, _selectionLastColumn);
+    const SelectionModel::Range selection = _selection.range();
+    *firstRow = selection.first.row;
+    *lastRow = selection.last.row;
+    *firstColumn = selection.first.column;
+    *lastColumn = selection.last.column;
 }
 
 - (IBAction)copy:(id)sender
@@ -653,6 +690,34 @@ void writeUiSmokeSuccess()
     [self tableView:_table setObjectValue:@"=A1+B1" forTableColumn:thirdColumn row:0];
     if (!require(workbook->displayValue(0, 2) == "5", @"Initial formula entry did not evaluate in C1.")) return NO;
 
+    // Regression: a ribbon action on an edited non-top cell must be a pure
+    // formatting operation. The control intentionally declines first-responder
+    // status, so the editor and logical selection remain in place.
+    [self tableView:_table setObjectValue:@"keep text" forTableColumn:thirdColumn row:4];
+    [self selectCellAtRow:4 column:2];
+    [_table reloadData]; [_table layoutSubtreeIfNeeded];
+    SpreadsheetCellTextField *editedCell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:2 row:4 makeIfNecessary:YES]);
+    [editedCell selectText:nil];
+    if (!require(editedCell.currentEditor != nil, @"Could not begin the non-top cell editing regression scenario.")) return NO;
+    [self.window makeFirstResponder:_styleControl];
+    [_styleControl setSelected:YES forSegment:0]; [self changeStyle:_styleControl];
+    if (!require(workbook->rawValue(4, 2) == "keep text" && _activeRow == 4 && _activeColumn == 2 && workbook->cellFormat(4, 2).bold,
+            @"Bold changed a non-top edited cell instead of only formatting it.")) return NO;
+    [_alignmentControl setSelected:YES forSegment:1]; [self changeAlignment:_alignmentControl];
+    if (!require(workbook->rawValue(4, 2) == "keep text" && _activeRow == 4 && _activeColumn == 2
+            && workbook->cellFormat(4, 2).alignment == HorizontalAlignment::Center,
+            @"Center Alignment changed a non-top edited cell instead of only formatting it.")) return NO;
+    [self.window makeFirstResponder:_table];
+
+    [self tableView:_table setObjectValue:@"=A1+B1" forTableColumn:thirdColumn row:5];
+    [self selectCellAtRow:5 column:2];
+    _selection.extendTo({5, 3});
+    [_styleControl setSelected:YES forSegment:0]; [self changeStyle:_styleControl];
+    [_alignmentControl setSelected:YES forSegment:1]; [self changeAlignment:_alignmentControl];
+    if (!require(workbook->rawValue(5, 2) == "=A1+B1" && workbook->rawValue(5, 3).empty()
+            && workbook->cellFormat(5, 2).bold && workbook->cellFormat(5, 3).alignment == HorizontalAlignment::Center,
+            @"Ribbon formatting changed a formula cell or range contents.")) return NO;
+
     [self selectCellAtRow:0 column:2];
     [_table reloadData];
     [_table layoutSubtreeIfNeeded];
@@ -664,6 +729,7 @@ void writeUiSmokeSuccess()
 
     [self selectCellAtRow:0 column:0];
     _selectionAnchorRow = 0; _selectionAnchorColumn = 0; _selectionLastRow = 1; _selectionLastColumn = 2;
+    _selection.extendTo({1, 2});
     [_table selectRowIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, 2)] byExtendingSelection:NO];
     [_fontFamilyControl selectItemWithTitle:@"Courier"];
     [self changeFontFamily:_fontFamilyControl];
@@ -680,6 +746,26 @@ void writeUiSmokeSuccess()
     [_table layoutSubtreeIfNeeded];
     NSTextField *formattedCell = static_cast<NSTextField *>([_table viewAtColumn:2 row:0 makeIfNecessary:YES]);
     if (!require(formattedCell.alignment == NSTextAlignmentRight && formattedCell.font.pointSize == 18.0, @"Formatted cell did not render the selected alignment and size.")) return NO;
+
+    // Formula-bar focus has the same ribbon contract: an unchanged draft and
+    // an uncommitted draft both survive formatting, and Escape alone cancels.
+    [self selectCellAtRow:3 column:3];
+    [self tableView:_table setObjectValue:@"formula keep" forTableColumn:_table.tableColumns[3] row:3];
+    [_formulaBar selectText:nil];
+    if (!_formulaSession->isEditing()) [self controlTextDidBeginEditing:[NSNotification notificationWithName:NSControlTextDidBeginEditingNotification object:_formulaBar]];
+    [_styleControl setSelected:YES forSegment:0]; [self changeStyle:_styleControl];
+    if (!require(_formulaSession->isEditing() && _formulaSession->draft() == "formula keep" && workbook->rawValue(3, 3) == "formula keep",
+            @"Formatting committed an unchanged focused formula field.")) return NO;
+    NSTextView *formulaEditor = static_cast<NSTextView *>(_formulaBar.currentEditor);
+    formulaEditor.string = @"discard formula draft";
+    _formulaBar.stringValue = formulaEditor.string;
+    [self controlTextDidChange:[NSNotification notificationWithName:NSControlTextDidChangeNotification object:_formulaBar]];
+    [_alignmentControl setSelected:YES forSegment:1]; [self changeAlignment:_alignmentControl];
+    if (!require(_formulaSession->draft() == "discard formula draft" && workbook->rawValue(3, 3) == "formula keep",
+            @"Formatting committed or replaced a formula-field draft.")) return NO;
+    [self cancelFormulaBar];
+    if (!require(workbook->rawValue(3, 3) == "formula keep" && !_formulaSession->isEditing(),
+            @"Escape did not cancel the formatted formula-field draft.")) return NO;
 
     [self selectCellAtRow:0 column:3];
     [_formulaBar selectText:nil];

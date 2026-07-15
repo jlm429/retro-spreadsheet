@@ -117,8 +117,8 @@ ctest --test-dir build --output-on-failure --label-exclude 'ui|local' --timeout 
 # AppKit smoke test. Run locally in an interactive macOS session.
 ctest --test-dir build --output-on-failure -R RetroSpreadsheetUiSmoke --timeout 15
 
-# AppKit end-to-end test. Run locally in an interactive macOS session.
-ctest --test-dir build --output-on-failure -R RetroSpreadsheetUiEndToEnd --timeout 20
+# AppKit ribbon regression test. Run locally in an interactive macOS session.
+ctest --test-dir build --output-on-failure -R RetroSpreadsheetUiRibbonRegression --timeout 20
 
 # All local tests, including portable and AppKit coverage.
 ctest --test-dir build --output-on-failure --timeout 20

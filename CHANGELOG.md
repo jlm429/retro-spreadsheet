@@ -4,6 +4,10 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Fixed ribbon-click editing isolation: formatting captures the logical range,
+  uses only portable formatting APIs, and refreshes visible cell formatting
+  without reloading or committing an active grid or formula-bar editor.
+
 - Fixed AppKit cell editing so a first-responder change cannot replace a raw
   formula with its displayed result. Ribbon formatting now applies only core
   formatting operations to the selected cell or rectangle.
