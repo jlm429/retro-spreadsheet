@@ -510,8 +510,7 @@ void writeUiSmokeSuccess()
     cell.spreadsheetRow = row;
     cell.spreadsheetColumn = column;
     const BOOL editing = [cell.currentEditor isKindOfClass:NSTextView.class]
-        && self.window.firstResponder == cell.currentEditor
-        && static_cast<NSTextView *>(cell.currentEditor).delegate == static_cast<id>(cell);
+        && self.window.firstResponder == cell.currentEditor;
     if (includeValue && !editing) cell.stringValue = asNSString([self.workbookDocument workbook]->displayValue(static_cast<int>(row), static_cast<int>(column)));
     const CellFormat format = [self.workbookDocument workbook]->cellFormat(static_cast<int>(row), static_cast<int>(column));
     NSFont *font = [NSFont fontWithName:asNSString(format.fontFamily) size:format.fontSize];
@@ -522,9 +521,19 @@ void writeUiSmokeSuccess()
     if (traits) font = [[NSFontManager sharedFontManager] convertFont:font toHaveTrait:traits];
     cell.font = font;
     cell.alignment = format.alignment == HorizontalAlignment::Center ? NSTextAlignmentCenter : format.alignment == HorizontalAlignment::Right ? NSTextAlignmentRight : NSTextAlignmentLeft;
-    if (!editing) {
-        if (format.underline) cell.attributedStringValue = [[NSAttributedString alloc] initWithString:cell.stringValue attributes:@{NSFontAttributeName: font, NSUnderlineStyleAttributeName: @(NSUnderlineStyleSingle)}];
-        else cell.attributedStringValue = [[NSAttributedString alloc] initWithString:cell.stringValue attributes:@{NSFontAttributeName: font}];
+    NSMutableParagraphStyle *paragraphStyle = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
+    paragraphStyle.alignment = cell.alignment;
+    if (editing) {
+        NSTextView *editor = static_cast<NSTextView *>(cell.currentEditor);
+        editor.defaultParagraphStyle = paragraphStyle;
+        NSMutableDictionary<NSAttributedStringKey, id> *typingAttributes = [editor.typingAttributes mutableCopy];
+        typingAttributes[NSParagraphStyleAttributeName] = paragraphStyle;
+        editor.typingAttributes = typingAttributes;
+        [editor setAlignment:cell.alignment range:NSMakeRange(0, editor.string.length)];
+    } else {
+        NSMutableDictionary<NSAttributedStringKey, id> *attributes = [@{NSFontAttributeName: font, NSParagraphStyleAttributeName: paragraphStyle} mutableCopy];
+        if (format.underline) attributes[NSUnderlineStyleAttributeName] = @(NSUnderlineStyleSingle);
+        cell.attributedStringValue = [[NSAttributedString alloc] initWithString:cell.stringValue attributes:attributes];
     }
 }
 
@@ -809,6 +818,9 @@ void writeUiSmokeSuccess()
     [_table scrollColumnToVisible:column];
     [_table layoutSubtreeIfNeeded];
     [_table editColumn:column row:row withEvent:nil select:YES];
+    SpreadsheetCellTextField *cell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:column row:row makeIfNecessary:NO]);
+    NSTextView *editor = static_cast<NSTextView *>(cell.currentEditor);
+    if (editor) [self.window makeFirstResponder:editor];
 }
 
 - (void)cancelFormulaBar
@@ -1088,6 +1100,51 @@ void writeUiSmokeSuccess()
     if (!require(centeredCell.alignment == NSTextAlignmentRight, @"Right Alignment did not refresh the visible cell immediately.")) return NO;
     [_alignmentControl setSelected:YES forSegment:0]; [self changeAlignment:_alignmentControl];
     if (!require(centeredCell.alignment == NSTextAlignmentLeft, @"Left Alignment did not refresh the visible cell immediately.")) return NO;
+
+    // Return ends the shared field-editor session. A subsequent ribbon click
+    // must update the displayed attributed text without moving the selection
+    // or turning the raw content into a formula-bar edit.
+    [self tableView:_table setObjectValue:@"before Return" forTableColumn:secondColumn row:7];
+    [self selectCellAtRow:7 column:1];
+    [_table reloadData]; [_table layoutSubtreeIfNeeded];
+    SpreadsheetCellTextField *returnAlignmentCell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:1 row:7 makeIfNecessary:YES]);
+    [returnAlignmentCell selectText:nil];
+    NSTextView *returnAlignmentEditor = static_cast<NSTextView *>(returnAlignmentCell.currentEditor);
+    if (!require(returnAlignmentEditor != nil && self.window.firstResponder == returnAlignmentEditor,
+            @"The Return-alignment regression scenario did not start grid editing.")) return NO;
+    returnAlignmentEditor.string = @"typed then returned";
+    [self control:returnAlignmentCell textView:returnAlignmentEditor doCommandBySelector:@selector(insertNewline:)];
+    SpreadsheetCellTextField *displayedReturnAlignmentCell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:1 row:7 makeIfNecessary:YES]);
+    [_alignmentControl setSelected:YES forSegment:1];
+    [_alignmentControl sendAction:_alignmentControl.action to:_alignmentControl.target];
+    NSParagraphStyle *displayedParagraphStyle = [displayedReturnAlignmentCell.attributedStringValue attribute:NSParagraphStyleAttributeName atIndex:0 effectiveRange:nil];
+    if (!require(_activeRow == 7 && _activeColumn == 1 && !_formulaSession->isEditing()
+            && workbook->rawValue(7, 1) == "typed then returned"
+            && [displayedReturnAlignmentCell.attributedStringValue.string isEqualToString:@"typed then returned"]
+            && displayedParagraphStyle.alignment == NSTextAlignmentCenter
+            && [_formulaBar.stringValue isEqualToString:@"typed then returned"],
+            @"Center after Return did not immediately update the displayed paragraph without changing selection or content.")) return NO;
+
+    // Tab through the actual shared field editor so the key-view chain cannot
+    // redirect a formula cell through the formula bar before grid navigation.
+    [self tableView:_table setObjectValue:@"=SUM(A1,B1)" forTableColumn:thirdColumn row:7];
+    [self selectCellAtRow:7 column:2];
+    [_table reloadData]; [_table layoutSubtreeIfNeeded];
+    SpreadsheetCellTextField *tabFormulaCell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:2 row:7 makeIfNecessary:YES]);
+    [tabFormulaCell selectText:nil];
+    NSTextView *tabFormulaEditor = static_cast<NSTextView *>(tabFormulaCell.currentEditor);
+    if (!require(tabFormulaEditor != nil && self.window.firstResponder == tabFormulaEditor,
+            @"The formula Tab regression scenario did not begin grid editing.")) return NO;
+    NSEvent *tabEvent = [NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint modifierFlags:0 timestamp:0
+        windowNumber:self.window.windowNumber context:nil characters:@"\t" charactersIgnoringModifiers:@"\t" isARepeat:NO keyCode:48];
+    [tabFormulaEditor keyDown:tabEvent];
+    SpreadsheetCellTextField *tabDestinationCell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:3 row:7 makeIfNecessary:NO]);
+    NSTextView *tabDestinationEditor = static_cast<NSTextView *>(tabDestinationCell.currentEditor);
+    if (!require(workbook->rawValue(7, 2) == "=SUM(A1,B1)" && _activeRow == 7 && _activeColumn == 3
+            && tabDestinationEditor != nil && self.window.firstResponder == tabDestinationEditor
+            && self.window.firstResponder != _formulaBar && self.window.firstResponder != _formulaBar.currentEditor,
+            @"Tab from a formula cell focused the formula bar instead of the next grid editor.")) return NO;
+    [self cancelCellEditing:tabDestinationCell];
 
     [self tableView:_table setObjectValue:@"=SUM(A1,B1)" forTableColumn:thirdColumn row:5];
     [self selectCellAtRow:5 column:2];
