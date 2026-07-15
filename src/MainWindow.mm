@@ -127,6 +127,7 @@ void writeUiSmokeSuccess()
 - (void)commitCellEditor:(SpreadsheetCellTextField *)cell value:(NSString *)value advanceColumn:(BOOL)advanceColumn;
 - (void)cancelCellEditing:(SpreadsheetCellTextField *)cell;
 - (void)commitFormulaBarAdvancingColumn:(BOOL)advanceColumn;
+- (void)selectCellAfterTabFromRow:(NSInteger)row column:(NSInteger)column;
 @end
 
 @implementation SpreadsheetTableView
@@ -552,7 +553,8 @@ void writeUiSmokeSuccess()
     [self.window makeFirstResponder:_table];
     _completingCellEdit = NO;
     if ([self.workbookDocument workbook]->setRawValue(static_cast<int>(row), static_cast<int>(column), committedValue)) [self.workbookDocument workbookDidChange];
-    [self selectCellAtRow:row column:advanceColumn ? std::min<NSInteger>(column + 1, Workbook::ColumnCount - 1) : column];
+    if (advanceColumn) [self selectCellAfterTabFromRow:row column:column];
+    else [self selectCellAtRow:row column:column];
     [_table reloadData];
     [self updateFormulaBar];
 }
@@ -574,6 +576,13 @@ void writeUiSmokeSuccess()
     _selection.select({static_cast<int>(row), static_cast<int>(column)});
     [_table setNeedsDisplay:YES];
     [self updateFormulaBar];
+}
+
+- (void)selectCellAfterTabFromRow:(NSInteger)row column:(NSInteger)column
+{
+    if (column < Workbook::ColumnCount - 1) [self selectCellAtRow:row column:column + 1];
+    else if (row < Workbook::RowCount - 1) [self selectCellAtRow:row + 1 column:0];
+    else [self selectCellAtRow:row column:column];
 }
 
 - (void)handleCellMouseDownAtRow:(NSInteger)row column:(NSInteger)column event:(NSEvent *)event
@@ -680,7 +689,7 @@ void writeUiSmokeSuccess()
         [_table reloadData];
         [self updateFormulaBar];
     }
-    if (advanceColumn) [self selectCellAtRow:destination.row column:std::min(destination.column + 1, Workbook::ColumnCount - 1)];
+    if (advanceColumn) [self selectCellAfterTabFromRow:destination.row column:destination.column];
 }
 
 - (void)cancelFormulaBar
@@ -1010,6 +1019,25 @@ void writeUiSmokeSuccess()
     [self control:tabCell textView:cellEditor doCommandBySelector:@selector(insertTab:)];
     if (!require(workbook->rawValue(7, 0) == "Tab commit" && _activeRow == 7 && _activeColumn == 1,
             @"Cell Tab did not commit once and move exactly one column right.")) return NO;
+    [self selectCellAtRow:7 column:Workbook::ColumnCount - 1];
+    [_table reloadData]; [_table layoutSubtreeIfNeeded];
+    SpreadsheetCellTextField *rightEdgeTabCell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:Workbook::ColumnCount - 1 row:7 makeIfNecessary:YES]);
+    [rightEdgeTabCell selectText:nil];
+    cellEditor = static_cast<NSTextView *>(rightEdgeTabCell.currentEditor);
+    cellEditor.string = @"Right-edge Tab commit";
+    [self control:rightEdgeTabCell textView:cellEditor doCommandBySelector:@selector(insertTab:)];
+    if (!require(workbook->rawValue(7, Workbook::ColumnCount - 1) == "Right-edge Tab commit" && _activeRow == 8 && _activeColumn == 0,
+            @"Cell Tab did not wrap from the final column to the next row.")) return NO;
+    [self selectCellAtRow:Workbook::RowCount - 1 column:Workbook::ColumnCount - 1];
+    [_table reloadData]; [_table layoutSubtreeIfNeeded];
+    SpreadsheetCellTextField *finalCell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:Workbook::ColumnCount - 1 row:Workbook::RowCount - 1 makeIfNecessary:YES]);
+    [finalCell selectText:nil];
+    cellEditor = static_cast<NSTextView *>(finalCell.currentEditor);
+    cellEditor.string = @"Final cell Tab commit";
+    [self control:finalCell textView:cellEditor doCommandBySelector:@selector(insertTab:)];
+    if (!require(workbook->rawValue(Workbook::RowCount - 1, Workbook::ColumnCount - 1) == "Final cell Tab commit"
+            && _activeRow == Workbook::RowCount - 1 && _activeColumn == Workbook::ColumnCount - 1,
+            @"Cell Tab moved beyond the final worksheet cell.")) return NO;
     [_table reloadData]; [_table layoutSubtreeIfNeeded];
     SpreadsheetCellTextField *returnCell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:1 row:7 makeIfNecessary:YES]);
     [returnCell selectText:nil];
@@ -1028,6 +1056,28 @@ void writeUiSmokeSuccess()
     [self control:escapeCell textView:cellEditor doCommandBySelector:@selector(cancelOperation:)];
     if (!require(workbook->rawValue(7, 2) == "keep cell" && _activeRow == 7 && _activeColumn == 2,
             @"Cell Escape did not discard the draft without moving the active cell.")) return NO;
+
+    [self selectCellAtRow:9 column:Workbook::ColumnCount - 1];
+    [_formulaBar selectText:nil];
+    if (!_formulaSession->isEditing()) [self controlTextDidBeginEditing:[NSNotification notificationWithName:NSControlTextDidBeginEditingNotification object:_formulaBar]];
+    editor = static_cast<NSTextView *>(_formulaBar.currentEditor);
+    if (!require(editor != nil && _formulaSession->isEditing(), @"Formula bar did not start the right-edge Tab test session.")) return NO;
+    editor.string = @"Formula right-edge Tab commit";
+    _formulaBar.stringValue = editor.string;
+    [self control:_formulaBar textView:editor doCommandBySelector:@selector(insertTab:)];
+    if (!require(workbook->rawValue(9, Workbook::ColumnCount - 1) == "Formula right-edge Tab commit" && _activeRow == 10 && _activeColumn == 0,
+            @"Formula-bar Tab did not wrap from the final column to the next row.")) return NO;
+    [self selectCellAtRow:Workbook::RowCount - 1 column:Workbook::ColumnCount - 1];
+    [_formulaBar selectText:nil];
+    if (!_formulaSession->isEditing()) [self controlTextDidBeginEditing:[NSNotification notificationWithName:NSControlTextDidBeginEditingNotification object:_formulaBar]];
+    editor = static_cast<NSTextView *>(_formulaBar.currentEditor);
+    if (!require(editor != nil && _formulaSession->isEditing(), @"Formula bar did not start the final-cell Tab test session.")) return NO;
+    editor.string = @"Formula final-cell Tab commit";
+    _formulaBar.stringValue = editor.string;
+    [self control:_formulaBar textView:editor doCommandBySelector:@selector(insertTab:)];
+    if (!require(workbook->rawValue(Workbook::RowCount - 1, Workbook::ColumnCount - 1) == "Formula final-cell Tab commit"
+            && _activeRow == Workbook::RowCount - 1 && _activeColumn == Workbook::ColumnCount - 1,
+            @"Formula-bar Tab moved beyond the final worksheet cell.")) return NO;
 
     [self selectCellAtRow:0 column:2];
     if (!require([_formulaBar.stringValue isEqualToString:@"=SUM(A1,B1)"], @"Formula bar did not return the active cell raw contents after selection.")) return NO;
