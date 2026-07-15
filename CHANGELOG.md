@@ -4,6 +4,15 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Fixed native cell selection to use controller-owned active-cell and rectangular
+  range state instead of AppKit row highlighting. Added fixed synchronized
+  one-based row headers and distinct formula-reference rendering.
+- Fixed raw formula commits to refresh evaluated worksheet values while preserving
+  formula-bar source text. Expanded portable formula coverage for comma arguments,
+  whitespace, malformed formulas, blanks, text, ranges, recalculation, and cycles.
+- Added local AppKit selection, row-header, and formula regression coverage. The
+  `ui` and `local` tests remain excluded from CircleCI's portable Linux job.
+
 - Fixed ribbon-click editing isolation: formatting captures the logical range,
   uses only portable formatting APIs, and refreshes visible cell formatting
   without reloading or committing an active grid or formula-bar editor.

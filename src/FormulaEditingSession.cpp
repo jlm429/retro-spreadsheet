@@ -15,7 +15,7 @@ void FormulaEditingSession::begin(Cell destination, const std::string &originalC
 {
     editing_ = true;
     destination_ = destination;
-    referenceRange_ = {destination, destination};
+    referenceRange_.reset();
     originalContents_ = originalContents;
     draft_ = originalContents;
 }

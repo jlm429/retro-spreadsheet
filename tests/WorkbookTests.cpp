@@ -156,6 +156,21 @@ TEST(Workbook_FormattingPreservesRawContentsFormulaAndLogicalSelection)
     REQUIRE(workbook.cellFormat(4, 4) == format);
 }
 
+TEST(SelectionModel_TracksActiveCellAndRectangularRangeIndependently)
+{
+    SelectionModel selection({2, 3});
+    selection.extendTo({4, 1});
+    const SelectionModel::Range range = selection.range();
+    REQUIRE(range.first.row == 2 && range.first.column == 1);
+    REQUIRE(range.last.row == 4 && range.last.column == 3);
+    REQUIRE(selection.isActive({4, 1}));
+    REQUIRE(selection.contains({3, 2}));
+    REQUIRE(!selection.contains({1, 2}));
+    selection.select({0, 0});
+    REQUIRE(selection.isActive({0, 0}));
+    REQUIRE(!selection.contains({0, 1}));
+}
+
 TEST(Workbook_CsvDoesNotPersistFormatting)
 {
     const std::filesystem::path path = std::filesystem::temp_directory_path() / "retro-spreadsheet-format-test.csv";

@@ -85,3 +85,36 @@ TEST(FormulaEvaluator_AllowsWhitespaceBeforeAggregateParentheses)
     REQUIRE_EQUAL(evaluator.evaluateCell(0, 5), "3");
     REQUIRE_EQUAL(evaluator.evaluateCell(0, 6), "2");
 }
+
+TEST(FormulaEvaluator_EvaluatesAllFunctionsWithCommaArgumentsAndWhitespace)
+{
+    const auto values = grid({{"1", " 2 ", "", "text", "=SUM(A1, B1)", "=AVERAGE(A1, B1)", "=MIN(A1, B1)", "=MAX(A1, B1)", "=COUNT(A1, B1, C1:D1)"}});
+    const FormulaEvaluator evaluator(values);
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 4), "3");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 5), "1.5");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 6), "1");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 7), "2");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 8), "2");
+}
+
+TEST(FormulaEvaluator_PreservesBlankAndTextAggregateSemantics)
+{
+    const auto values = grid({{"", "text", "=SUM(A1)", "=COUNT(A1:B1)", "=AVERAGE(A1)", "=SUM(B1)", "=SUM( )", "=COUNT( \t)"}});
+    const FormulaEvaluator evaluator(values);
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 2), "0");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 3), "0");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 4), "#FORMULA!");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 5), "#VALUE!");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 6), "0");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 7), "0");
+}
+
+TEST(FormulaEvaluator_ReportsMalformedUnknownAndReferenceErrors)
+{
+    const auto values = grid({{"1", "=SUM(A1,,A1)", "=SUM(A1,)", "=MEDIAN(A1)", "=SUM(A1,Z1)"}});
+    const FormulaEvaluator evaluator(values);
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 1), "#FORMULA!");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 2), "#FORMULA!");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 3), "#FORMULA!");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 4), "#REF!");
+}

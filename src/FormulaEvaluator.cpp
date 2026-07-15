@@ -67,7 +67,10 @@ std::string FormulaEvaluator::evaluateAggregate(const std::string &formula, cons
     if (!std::regex_match(formula, match, expression)) return "#FORMULA!";
     double total = 0.0;
     int count = 0;
-    if (!evaluateRangeArguments(match[1].str(), visiting, total, count, function == "COUNT")) return count < 0 ? "#REF!" : "#VALUE!";
+    if (!evaluateRangeArguments(match[1].str(), visiting, total, count, function == "COUNT")) {
+        if (count == -2) return "#FORMULA!";
+        return count < 0 ? "#REF!" : "#VALUE!";
+    }
     if (function == "SUM") return formatNumber(total);
     if (function == "COUNT") return formatNumber(count);
     if (count == 0) return "#FORMULA!";
@@ -98,11 +101,17 @@ std::string FormulaEvaluator::evaluateAggregate(const std::string &formula, cons
 bool FormulaEvaluator::evaluateRangeArguments(const std::string &arguments, std::vector<std::vector<bool>> &visiting,
                                               double &total, int &count, bool ignoreText) const
 {
+    const std::string trimmedArguments = trim(arguments);
+    if (trimmedArguments.empty()) return true;
+    if (trimmedArguments.front() == ',' || trimmedArguments.back() == ',') {
+        count = -2;
+        return false;
+    }
     std::stringstream input(arguments);
     std::string argument;
     bool any = false;
     while (std::getline(input, argument, ',')) {
-        if (trim(argument).empty()) continue;
+        if (trim(argument).empty()) { count = -2; return false; }
         any = true;
         int firstRow = 0, firstColumn = 0, lastRow = 0, lastColumn = 0;
         if (!parseRange(argument, firstRow, firstColumn, lastRow, lastColumn)) { count = -1; return false; }
@@ -119,7 +128,7 @@ bool FormulaEvaluator::evaluateRangeArguments(const std::string &arguments, std:
             ++count;
         }
     }
-    return any || trim(arguments).empty();
+    return any;
 }
 
 bool FormulaEvaluator::parseRange(const std::string &text, int &firstRow, int &firstColumn, int &lastRow, int &lastColumn) const
