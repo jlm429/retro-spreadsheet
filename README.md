@@ -65,7 +65,7 @@ The application is a native macOS AppKit spreadsheet with:
 
 - a 20 row by 10 column worksheet
 - native `NSDocument` open, save, save as, recent document, and dirty handling
-- a compact classic ribbon for font family, size, bold, italic, underline, and horizontal alignment, applied to the active cell or a Shift-click-selected rectangular range
+- a compact classic ribbon for font family, size, bold, italic, underline, and horizontal alignment, applied to the active cell or a Shift-click-selected rectangular range without replacing cell contents, committing an active cell or formula-bar edit, or changing the logical selection
 - editable `NSTableView` cells plus a raw-content `fx` formula bar where Return commits and Escape restores the original raw content
 - copy, cut, and paste for rectangular cell ranges
 - formulas using direct references, `+`, `-`, `*`, `/`, `SUM(...)`,
@@ -105,8 +105,8 @@ macOS, add `-DRETRO_SPREADSHEET_BUILD_APP=OFF` to the configure command.
 ## Tests
 
 CTest runs the dependency-free C++ engine suite and, on macOS when the AppKit
-application is enabled, registers separate local AppKit smoke and end-to-end
-tests. The engine suite is the default fast-feedback path and does not launch a
+application is enabled, registers separate local AppKit smoke and ribbon
+regression tests. The engine suite is the default fast-feedback path and does not launch a
 GUI or access the network. CircleCI uses a Linux executor and configures only
 the portable core. It explicitly excludes both `ui` and `local` labels.
 
@@ -125,7 +125,7 @@ ctest --test-dir build --output-on-failure --timeout 20
 ```
 
 Every CTest process has an explicit timeout. Core tests have a 5-second limit,
-the local smoke test has a 10-second limit, and the local end-to-end test has a
+the local smoke test has a 10-second limit, and the local ribbon regression test has a
 15-second limit. The app launcher itself has a 12-second limit. CI additionally
 applies CTest's 15-second timeout and a 30-second process timeout, so a child
 process that does not terminate cannot hold the job indefinitely. The local UI
