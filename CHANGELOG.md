@@ -4,6 +4,15 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Routed native grid and formula-bar Return, Tab, and Escape through one explicit
+  commit or cancel path. Return retains the active cell, and Tab advances one
+  column, wrapping from the final column to column A of the next row while the
+  final worksheet cell remains active after its Tab commit. The local AppKit
+  workflow now verifies immediate Center Alignment refresh without a follow-up
+  edit.
+- Added portable regression coverage for raw formula source, evaluated values,
+  supported functions, dependent recalculation, undo, and redo.
+
 - Reorganized coding-agent guidance into concise repository-wide rules and
   focused skills for spreadsheet core behavior, formulas, AppKit interaction,
   and testing.
@@ -24,8 +33,7 @@ All notable project changes should be recorded here as they are made.
 - Fixed AppKit cell editing so a first-responder change cannot replace a raw
   formula with its displayed result. Ribbon formatting now applies only core
   formatting operations to the selected cell or rectangle.
-- Fixed formula-bar event ordering: Return is the only commit path, Escape
-  restores the original raw content, and function/reference insertion remains
+- Fixed formula-bar Escape restoration while function/reference insertion remains
   in the draft until commit. Added native local smoke and bounded ribbon regression
   coverage for formatting, editing, references, recalculation, and undo/redo.
 - Added explicit `ui` and `local` CTest labels. CircleCI continues to run only
