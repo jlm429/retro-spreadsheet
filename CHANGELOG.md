@@ -33,8 +33,7 @@ All notable project changes should be recorded here as they are made.
 - Fixed AppKit cell editing so a first-responder change cannot replace a raw
   formula with its displayed result. Ribbon formatting now applies only core
   formatting operations to the selected cell or rectangle.
-- Fixed formula-bar event ordering: Return is the only commit path, Escape
-  restores the original raw content, and function/reference insertion remains
+- Fixed formula-bar Escape restoration while function/reference insertion remains
   in the draft until commit. Added native local smoke and bounded ribbon regression
   coverage for formatting, editing, references, recalculation, and undo/redo.
 - Added explicit `ui` and `local` CTest labels. CircleCI continues to run only

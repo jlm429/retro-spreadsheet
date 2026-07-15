@@ -62,7 +62,7 @@ The application is a native macOS AppKit spreadsheet with:
 
 - a 20 row by 10 column worksheet
 - native `NSDocument` open, save, save as, recent document, and dirty handling
-- a compact classic ribbon for font family, size, bold, italic, underline, and horizontal alignment, applied to the active cell or a Shift-click-selected rectangular range without replacing cell contents, committing an active cell or formula-bar edit, or changing the logical selection
+- a compact classic ribbon for font family, size, bold, italic, underline, and horizontal alignment, applied to the active cell or a Shift-click-selected rectangular range with its visible formatting refreshed immediately, without replacing cell contents, committing an active cell or formula-bar edit, or changing the logical selection
 - editable `NSTableView` cells plus a raw-content `fx` formula bar where Return commits without moving the active cell, Tab commits and advances one column, wrapping from the final column to column A of the next row, while Tab at the final worksheet cell retains that active cell, and Escape restores the original raw content
 - copy, cut, and paste for rectangular cell ranges
 - formulas using direct references, `+`, `-`, `*`, `/`, `SUM(...)`,
