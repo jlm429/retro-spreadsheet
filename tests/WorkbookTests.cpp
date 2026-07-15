@@ -201,6 +201,24 @@ TEST(SelectionModel_TracksActiveCellAndRectangularRangeIndependently)
     REQUIRE(!selection.contains({0, 1}));
 }
 
+TEST(SelectionModel_TracksWholeHeadersWithoutLosingTheActiveCell)
+{
+    SelectionModel selection({2, 3});
+    selection.selectRow(5, selection.activeCell().column, Workbook::ColumnCount);
+    REQUIRE(selection.kind() == SelectionModel::Kind::EntireRow);
+    REQUIRE(selection.isActive({5, 3}));
+    REQUIRE(selection.contains({5, 0}));
+    REQUIRE(selection.contains({5, Workbook::ColumnCount - 1}));
+
+    selection.selectColumn(7, selection.activeCell().row, Workbook::RowCount);
+    REQUIRE(selection.kind() == SelectionModel::Kind::EntireColumn);
+    REQUIRE(selection.isActive({5, 7}));
+    REQUIRE(selection.contains({0, 7}));
+    REQUIRE(selection.contains({Workbook::RowCount - 1, 7}));
+    selection.select({1, 1});
+    REQUIRE(selection.kind() == SelectionModel::Kind::Cells);
+}
+
 TEST(Workbook_CsvDoesNotPersistFormatting)
 {
     const std::filesystem::path path = std::filesystem::temp_directory_path() / "retro-spreadsheet-format-test.csv";
