@@ -71,7 +71,9 @@ The application is a native macOS AppKit spreadsheet with:
 - formulas using direct references, `+`, `-`, `*`, `/`, `SUM(...)`,
   `AVERAGE(...)`, `MIN(...)`, `MAX(...)`, and `COUNT(...)`
 
-Formula references use spreadsheet-style names such as `A1`. `SUM`,
+Formula cells display their evaluated value in the grid while the `fx` bar
+retains the raw formula source for the active cell. Formula references use
+spreadsheet-style names such as `A1`. `SUM`,
 `AVERAGE`, `MIN`, `MAX`, and `COUNT` accept single cells, ranges such as
 `A1:B3`, and comma-separated arguments such as `A1,B1`. The function dropdown
 starts an uncommitted formula template; while editing, clicking or dragging the
@@ -105,7 +107,7 @@ macOS, add `-DRETRO_SPREADSHEET_BUILD_APP=OFF` to the configure command.
 ## Tests
 
 CTest runs the dependency-free C++ engine suite and, on macOS when the AppKit
-application is enabled, registers separate local AppKit smoke and ribbon
+application is enabled, registers separate local AppKit smoke and selection/formula
 regression tests. The engine suite is the default fast-feedback path and does not launch a
 GUI or access the network. CircleCI uses a Linux executor and configures only
 the portable core. It explicitly excludes both `ui` and `local` labels.
@@ -150,5 +152,6 @@ The grid has one active cell and controller-owned rectangular selection. AppKit
 row selection is disabled: the grid renders the active cell and selected range,
 while formula-reference ranges use a distinct orange highlight. Fixed one-based
 row headers scroll vertically with the worksheet and remain fixed horizontally.
-Shift-click another cell to select a rectangular range for ribbon formatting,
-copy, cut, and clear operations; paste begins at the active cell.
+Click a cell to make it active, then Shift-click another cell or drag from the
+active cell to select a rectangular range for ribbon formatting, copy, cut, and
+clear operations; paste begins at the active cell.
