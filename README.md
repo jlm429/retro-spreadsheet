@@ -117,15 +117,15 @@ ctest --test-dir build --output-on-failure --label-exclude 'ui|local' --timeout 
 # AppKit smoke test. Run locally in an interactive macOS session.
 ctest --test-dir build --output-on-failure -R RetroSpreadsheetUiSmoke --timeout 15
 
-# AppKit ribbon regression test. Run locally in an interactive macOS session.
-ctest --test-dir build --output-on-failure -R RetroSpreadsheetUiRibbonRegression --timeout 20
+# AppKit selection, row-header, and formula regression test. Run locally in an interactive macOS session.
+ctest --test-dir build --output-on-failure -R RetroSpreadsheetUiSelectionFormulaRegression --timeout 20
 
 # All local tests, including portable and AppKit coverage.
 ctest --test-dir build --output-on-failure --timeout 20
 ```
 
 Every CTest process has an explicit timeout. Core tests have a 5-second limit,
-the local smoke test has a 10-second limit, and the local ribbon regression test has a
+the local smoke test has a 10-second limit, and the local selection/formula regression test has a
 15-second limit. The app launcher itself has a 12-second limit. CI additionally
 applies CTest's 15-second timeout and a 30-second process timeout, so a child
 process that does not terminate cannot hold the job indefinitely. The local UI
@@ -146,6 +146,9 @@ must take a `Workbook::Snapshot` on the main thread, call the pure
 thread and compare the result revision before applying it. AppKit controllers,
 `NSDocument`, and all access to the live `Workbook` remain on the main thread.
 
-The grid has one active cell. Shift-click another cell to select a rectangular
-range for ribbon formatting, copy, cut, and clear operations; paste begins at
-the active cell.
+The grid has one active cell and controller-owned rectangular selection. AppKit
+row selection is disabled: the grid renders the active cell and selected range,
+while formula-reference ranges use a distinct orange highlight. Fixed one-based
+row headers scroll vertically with the worksheet and remain fixed horizontally.
+Shift-click another cell to select a rectangular range for ribbon formatting,
+copy, cut, and clear operations; paste begins at the active cell.

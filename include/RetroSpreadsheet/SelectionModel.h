@@ -15,6 +15,8 @@ public:
     void extendTo(Cell cell);
     Cell activeCell() const;
     Range range() const;
+    bool contains(Cell cell) const;
+    bool isActive(Cell cell) const;
 
 private:
     Cell active_;

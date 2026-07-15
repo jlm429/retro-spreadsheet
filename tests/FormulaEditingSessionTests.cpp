@@ -5,6 +5,7 @@ TEST(FormulaEditingSession_KeepsDestinationSeparateFromReferencedRange)
 {
     FormulaEditingSession session;
     session.begin({4, 4}, "old value");
+    REQUIRE(!session.referenceRange());
     session.insertReference({{0, 0}, {2, 1}}, 0);
     REQUIRE(session.destination().row == 4);
     REQUIRE(session.destination().column == 4);
