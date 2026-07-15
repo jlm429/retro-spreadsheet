@@ -4,6 +4,10 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Reorganized coding-agent guidance into concise repository-wide rules and
+  focused skills for spreadsheet core behavior, formulas, AppKit interaction,
+  and testing.
+
 - Fixed native cell selection to use controller-owned active-cell and rectangular
   range state instead of AppKit row highlighting. Added fixed synchronized
   one-based row headers and distinct formula-reference rendering.

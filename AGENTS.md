@@ -1,183 +1,126 @@
 # Agent Guidance
 
-This document is the canonical guidance for all coding assistants working in this repository.
+This is the canonical repository-wide guidance for coding agents. Read the
+relevant skill before changing its subsystem.
 
 ## Project
 
-Build a modern educational spreadsheet application inspired by classic desktop spreadsheets.
+Build a modern educational spreadsheet application inspired by classic desktop
+spreadsheets.
 
-Stack:
+Stack: C++17, CMake, and native macOS AppKit with Objective-C++ only at the UI
+boundary. See [docs/project-structure.md](docs/project-structure.md) for the
+current layout and component ownership.
 
-- C++17
-- AppKit and Objective-C++ at the UI boundary
-- CMake
-- CLion
-- macOS
+## Architecture
 
----
+The portable C++ core owns workbook state, formulas, formatting, parsing,
+evaluation, recalculation, validation, persistence, and undo/redo.
 
-## Operating Principles
+The AppKit layer owns controls, rendering, mouse and keyboard input, selection
+rendering, first responder management, and translation of user actions into
+core operations.
 
-- Act as a senior engineer and mentor.
-- Understand the existing code before making changes.
+- AppKit types never enter the portable core.
+- Avoid global mutable state and keep data flow explicit.
+- Do not introduce background threads unless requested.
+- Never claim thread safety without synchronization.
+
+## Skill routing
+
+Read the applicable skill before changing code or tests in that area:
+
+- Read `.agents/skills/spreadsheet-core/SKILL.md` before changing `Workbook`,
+  worksheet state, cell formatting, persistence, undo/redo, or portable model
+  behavior.
+- Read `.agents/skills/formula-engine/SKILL.md` before changing formula syntax,
+  parsing, evaluation, references, dependency behavior, or formula editing.
+- Read `.agents/skills/appkit-spreadsheet-ui/SKILL.md` before changing AppKit
+  controls, `MainWindow.mm`, interaction, rendering, selection, or native UI
+  tests.
+- Read `.agents/skills/spreadsheet-testing/SKILL.md` before adding, changing,
+  or running tests, CTest configuration, or CircleCI configuration.
+
+Read more than one skill when a change crosses boundaries. The skills contain
+the detailed subsystem rules; do not duplicate them in prompts or unrelated
+documentation.
+
+## Operating principles
+
 - Keep changes small, direct, reviewable, and working after each step.
-- Prefer maintainability and readability over cleverness.
-- Implement only what was requested.
-- State assumptions when they affect behavior, design, or scope.
-- Push back when a request would introduce unnecessary complexity or technical debt.
-- Do not use em dashes in prose, comments, documentation, commit messages, or pull requests.
-- Do not add an agent name as a commit co-author.
+- Prefer maintainability, readability, and root-cause fixes over cleverness.
+- Implement only the requested scope. State assumptions that affect behavior,
+  design, or scope.
+- Do not overwrite user changes. Match the existing style.
+- Preserve architectural boundaries and do not refactor unrelated code.
+- Do not use em dashes in prose, comments, documentation, commit messages, or
+  pull request text.
 
----
+For substantial work, deliver one complete workflow rather than many partial
+features. Establish architecture before breadth; complete model, UI, rendering,
+tests, and documentation together. If the requested scope is too large, deliver
+the architecture plus one complete vertical slice.
 
 ## Workflow
 
-### Before changing code
+Before coding: inspect repository and worktree status, read affected code and
+relevant skills, reproduce bugs when practical, trace affected event and data
+flow, define verification first, and identify the smallest complete milestone.
 
-- Check repository status.
-- Read the relevant source files.
-- Identify the next logical milestone.
-- Define how the change will be verified.
-- Explain the plan when it changes design or scope.
+During coding: preserve boundaries, keep builds working, avoid partially
+implemented controls, and add regression tests with bug fixes whenever
+practical. Resolve build or test failures introduced by the change.
 
-### While changing code
+After coding: run applicable portable tests and local AppKit tests for UI
+changes, review the final diff and intended files, update `CHANGELOG.md` when
+appropriate, and report skipped validation and remaining risks. Compilation
+alone is never sufficient validation for UI behavior.
 
-- Modify only the files required for the task.
-- Match the existing coding style.
-- Do not refactor unrelated code.
-- Do not overwrite user changes.
-- Remove only code made unnecessary by the requested change.
-- Mention unrelated issues separately instead of fixing them.
+## Verification and testing
 
-### After changing code
+Use `CMakeLists.txt`, CTest registration, and `.circleci/config.yml` as the
+authoritative commands and labels. Keep tests deterministic and bounded with
+explicit timeouts for asynchronous or UI work. Maintain coverage for new or
+changed behavior.
 
-- Configure and build.
-- Run relevant automated tests.
-- Resolve build or test failures introduced by the change.
-- Review the final diff.
-- Confirm only intended files changed.
-- Report skipped tests, warnings, or remaining issues.
-- Update CHANGELOG.md when user-visible code, build configuration, or documentation changes.
-- Never claim success without verification.
+## Definition of done
 
-Standard verification:
+A task is complete when the requested behavior is implemented, applicable
+builds and tests pass, changed behavior has appropriate coverage, and relevant
+documentation is updated. Never claim success without reporting verification.
 
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build --parallel
-```
+## Git and CI safety
 
----
+Create local commits only when explicitly requested. Before committing, review
+the staged diff, exclude generated artifacts and secrets, stage focused files,
+and use a concise commit message. Never add an agent name as a commit
+co-author.
 
-## Testing
+Do not push, force push, rebase, rewrite history, modify remotes, delete
+branches, or delete tags unless explicitly requested.
 
-Maintain the test suite alongside production code.
-
-- New features should include appropriate unit, integration, or UI tests.
-- Bug fixes should include a regression test whenever practical.
-- Update existing tests when behavior intentionally changes.
-- Tests must be deterministic and never hang indefinitely.
-- Use explicit timeouts for asynchronous or UI operations and fail with
-  descriptive messages.
-- Keep business logic testable independently of the UI whenever possible.
-- Leave the repository in a more testable state than it was found.
-
----
-
-## Definition of Done
-
-A task is complete when:
-
-- The code builds successfully.
-- Existing tests pass.
-- New or modified behavior is covered by appropriate tests.
-- Documentation is updated if behavior changed.
-
----
-
-## Git
-
-Create local commits only when explicitly requested.
-
-Before committing:
-
-- Review the staged diff.
-- Confirm generated files and secrets are not staged.
-- Stage specific files whenever practical.
-- Use concise commit messages.
-
-Never perform the following unless explicitly requested:
-
-- push
-- force push
-- rebase
-- rewrite history
-- delete branches or tags
-- modify remotes
-
----
-
-## Continuous Integration
-
-Treat CI configuration as production infrastructure.
-
-Before committing CI changes:
-
-- Verify locally when practical.
-- Review the configuration diff.
-- Never commit secrets or credentials.
-- Distinguish between local verification and remote CI results.
-
----
+Treat CI configuration as production infrastructure. Verify CI changes locally
+when practical, review the configuration diff, and distinguish local validation
+from remote CI results.
 
 ## Security
 
-Never expose or commit:
+Never read, print, summarize, copy, commit, or expose API keys, access tokens,
+credentials, service-account files, private certificates, or `.env` files.
+Document secrets only by variable name in `.env.example`. Do not hardcode API
+keys, tokens, authenticated endpoints, secrets, or personal filesystem paths.
 
-- API keys
-- tokens
-- credentials
-- `.env` files
-- service account files
+If a secret appears exposed, stop immediately, notify the user, and do not
+continue until it is addressed.
 
-Document required secrets only by variable name in `.env.example`.
+## Memory safety
 
-Stop and alert the user immediately if a secret appears to be exposed.
+Prefer RAII, automatic storage, standard-library containers, const correctness,
+and `std::unique_ptr` or `std::shared_ptr` when ownership is shared. Avoid raw
+owning pointers and manual `new` or `delete` unless justified. Keep ownership
+explicit, document non-obvious lifetime relationships, minimize lifetimes, and
+avoid dangling pointers, iterator invalidation, use-after-free, and undefined
+behavior.
 
----
-
-## Memory Safety
-
-Prioritize memory-safe C++.
-
-- Prefer RAII and automatic storage over manual memory management.
-- Prefer standard library containers and smart pointers instead of raw owning pointers.
-- Never introduce `new`/`delete` unless there is a clear technical requirement.
-- Clearly document ownership when pointers or references are used.
-- Avoid dangling pointers, iterator invalidation, and undefined behavior.
-- Minimize object lifetimes and keep ownership explicit.
-
----
-
-## Ask Before
-
-Ask before:
-
-- installing software
-- requesting credentials
-- modifying system configuration
-- deleting files
-- rewriting Git history
-- force pushing
-- making major architectural changes
-
----
-
-## Goal
-
-Optimize for:
-
-- maintainability
-- educational value
-- clean architecture
-- incremental software engineering
+Changes affecting ownership, lifetime, or object relationships deserve extra
+review.

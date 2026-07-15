@@ -32,7 +32,7 @@ src/                       Application source code
 tests/                     Fast C++ engine tests and UI smoke-test support
 docs/                      Project documentation
 resources/                 Placeholder directories for future assets
-skills/                    Specialized engineering knowledge
+.agents/skills/            Focused project skills
 ```
 
 ### AGENTS.md
@@ -48,12 +48,9 @@ Defines the engineering principles that guide every change in the repository, in
 
 Skills provide specialized domain knowledge that is loaded only when relevant.
 
-Examples include:
-
-- spreadsheet engineering
-- formula evaluation
-- dependency graphs
-- AppKit development
+The repository provides focused skills for spreadsheet core behavior, formula
+engineering, AppKit interaction, and testing. `AGENTS.md` states exactly when
+each one must be read.
 
 Keeping repository guidance separate from specialized skills helps minimize context while allowing deeper expertise when needed.
 

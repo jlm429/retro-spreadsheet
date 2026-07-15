@@ -8,7 +8,8 @@ This project uses a conventional C++ desktop application layout.
 - `src/`: implementation files and the application entry point.
 - `resources/`: bundle metadata plus placeholders for future icons and native theme assets.
 - `tests/`: dependency-free C++ core tests. On local macOS AppKit builds, CTest also registers bounded UI smoke and selection/formula regression tests.
-- `skills/`: project-specific agent guidance.
+- `.agents/skills/`: focused project skills for core semantics, formulas,
+  AppKit interaction, and testing. `AGENTS.md` routes agents to them.
 
 The core target contains `Workbook`, `FormulaEvaluator`, `FormulaEditingSession`,
 and `SelectionModel`. `Workbook` owns the fixed 20 by 10 grid, raw values,
