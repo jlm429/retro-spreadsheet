@@ -783,8 +783,17 @@ void writeUiSmokeSuccess()
     if (!require([self isActiveCellAtRow:0 column:2] && [self isSelectedCellAtRow:0 column:2]
             && ![self isSelectedCellAtRow:1 column:2], @"Clicking C1 did not create a single logical cell selection.")) return NO;
 
-    [self selectCellAtRow:0 column:0];
-    _selection.extendTo({1, 2});
+    [_table layoutSubtreeIfNeeded];
+    const NSRect firstCell = [_table frameOfCellAtColumn:0 row:0];
+    const NSRect lastCell = [_table frameOfCellAtColumn:2 row:1];
+    const NSPoint clickPoint = [_table convertPoint:NSMakePoint(NSMidX(firstCell), NSMidY(firstCell)) toView:nil];
+    const NSPoint dragPoint = [_table convertPoint:NSMakePoint(NSMidX(lastCell), NSMidY(lastCell)) toView:nil];
+    NSEvent *click = [NSEvent mouseEventWithType:NSEventTypeLeftMouseDown location:clickPoint modifierFlags:0 timestamp:0
+        windowNumber:self.window.windowNumber context:nil eventNumber:0 clickCount:1 pressure:1.0];
+    NSEvent *drag = [NSEvent mouseEventWithType:NSEventTypeLeftMouseDragged location:dragPoint modifierFlags:0 timestamp:0
+        windowNumber:self.window.windowNumber context:nil eventNumber:0 clickCount:1 pressure:1.0];
+    [self handleCellMouseDownAtRow:0 column:0 event:click];
+    [self handleCellDragEvent:drag];
     if (!require([self isSelectedCellAtRow:1 column:2] && ![self isSelectedCellAtRow:2 column:2], @"Dragging a logical range did not select only its rectangle.")) return NO;
     if (!require(_rowHeaderView.bounds.size.height >= 27 + Workbook::RowCount * 27, @"One-based row headers were not created for every worksheet row.")) return NO;
     if (!require([[_rowHeaderView textForRow:0] isEqualToString:@"1"], @"The first row header was not one-based.")) return NO;
