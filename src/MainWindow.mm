@@ -74,9 +74,14 @@ void writeUiSmokeSuccess()
 @end
 
 @interface SpreadsheetRowHeaderView : NSView
+@property(nonatomic, assign) SpreadsheetWindowController *spreadsheetController;
 @property(nonatomic) CGFloat tableHeaderHeight;
 @property(nonatomic) CGFloat rowHeight;
 - (NSString *)textForRow:(NSInteger)row;
+@end
+
+@interface SpreadsheetColumnHeaderView : NSTableHeaderView
+@property(nonatomic, assign) SpreadsheetWindowController *spreadsheetController;
 @end
 
 @interface FormulaBarTextField : NSTextField
@@ -114,20 +119,27 @@ void writeUiSmokeSuccess()
 - (void)selectCellAtRow:(NSInteger)row column:(NSInteger)column;
 - (void)handleCellMouseDownAtRow:(NSInteger)row column:(NSInteger)column event:(NSEvent *)event;
 - (void)handleCellDragEvent:(NSEvent *)event;
+- (void)prepareCellForEditing:(SpreadsheetCellTextField *)cell;
+- (void)handleRowHeaderMouseDownAtRow:(NSInteger)row;
+- (void)handleColumnHeaderMouseDownAtColumn:(NSInteger)column;
 - (void)cancelFormulaBar;
 - (void)insertFormulaReference:(FormulaEditingSession::Range)range;
 - (BOOL)isFormulaEditing;
 - (BOOL)isReferenceCellAtRow:(NSInteger)row column:(NSInteger)column;
 - (BOOL)isSelectedCellAtRow:(NSInteger)row column:(NSInteger)column;
 - (BOOL)isActiveCellAtRow:(NSInteger)row column:(NSInteger)column;
+- (BOOL)isRowSelected:(NSInteger)row;
+- (BOOL)isColumnSelected:(NSInteger)column;
 - (BOOL)runEndToEndCheck:(NSString **)failure;
 - (void)configureCell:(SpreadsheetCellTextField *)cell row:(NSInteger)row column:(NSInteger)column includeValue:(BOOL)includeValue;
 - (void)syncRowHeaderGeometry;
+- (void)refreshVisibleGridRendering;
 - (void)tableHeaderFrameDidChange:(NSNotification *)notification;
 - (void)commitCellEditor:(SpreadsheetCellTextField *)cell value:(NSString *)value advanceColumn:(BOOL)advanceColumn;
 - (void)cancelCellEditing:(SpreadsheetCellTextField *)cell;
 - (void)commitFormulaBarAdvancingColumn:(BOOL)advanceColumn;
 - (void)selectCellAfterTabFromRow:(NSInteger)row column:(NSInteger)column;
+- (void)beginEditingCellAtRow:(NSInteger)row column:(NSInteger)column;
 @end
 
 @implementation SpreadsheetTableView
@@ -150,6 +162,12 @@ void writeUiSmokeSuccess()
 @end
 
 @implementation SpreadsheetCellTextField
+
+- (void)selectText:(id)sender
+{
+    [self.spreadsheetController prepareCellForEditing:self];
+    [super selectText:sender];
+}
 
 - (void)mouseDown:(NSEvent *)event
 {
@@ -197,12 +215,42 @@ void writeUiSmokeSuccess()
     NSDictionary *attributes = @{NSFontAttributeName: [NSFont systemFontOfSize:12], NSForegroundColorAttributeName: NSColor.secondaryLabelColor};
     for (NSInteger row = firstRow; row <= lastRow; ++row) {
         const CGFloat y = headerHeight + row * rowHeight;
+        if ([self.spreadsheetController isRowSelected:row]) {
+            [[NSColor.selectedControlColor colorWithAlphaComponent:0.22] setFill];
+            NSRectFill(NSMakeRect(0, y, NSWidth(self.bounds), rowHeight));
+        }
         const NSString *text = [self textForRow:row];
         const NSSize size = [text sizeWithAttributes:attributes];
         [text drawAtPoint:NSMakePoint(NSWidth(self.bounds) - size.width - 6.0, y + (rowHeight - size.height) / 2.0) withAttributes:attributes];
         [NSColor.separatorColor setFill];
         NSRectFill(NSMakeRect(0, y + rowHeight - 1.0, NSWidth(self.bounds), 1.0));
     }
+}
+
+- (void)mouseDown:(NSEvent *)event
+{
+    const NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+    const NSInteger row = static_cast<NSInteger>(std::floor((point.y - _tableHeaderHeight) / _rowHeight));
+    if (row >= 0 && row < Workbook::RowCount) [self.spreadsheetController handleRowHeaderMouseDownAtRow:row];
+}
+@end
+
+@implementation SpreadsheetColumnHeaderView
+- (void)drawRect:(NSRect)dirtyRect
+{
+    [super drawRect:dirtyRect];
+    for (NSInteger column = 0; column < self.tableView.numberOfColumns; ++column) {
+        if (![self.spreadsheetController isColumnSelected:column]) continue;
+        [[NSColor.selectedControlColor colorWithAlphaComponent:0.22] setFill];
+        NSRectFill([self headerRectOfColumn:column]);
+    }
+}
+
+- (void)mouseDown:(NSEvent *)event
+{
+    const NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+    const NSInteger column = [self columnAtPoint:point];
+    if (column >= 0 && column < self.tableView.numberOfColumns) [self.spreadsheetController handleColumnHeaderMouseDownAtColumn:column];
 }
 @end
 
@@ -363,6 +411,7 @@ void writeUiSmokeSuccess()
     NSScrollView *rowHeaderScroll = [[NSScrollView alloc] init];
     rowHeaderScroll.hasVerticalScroller = NO; rowHeaderScroll.hasHorizontalScroller = NO; rowHeaderScroll.borderType = NSBezelBorder;
     _rowHeaderView = [[SpreadsheetRowHeaderView alloc] initWithFrame:NSMakeRect(0, 0, 42, 0)];
+    _rowHeaderView.spreadsheetController = self;
     rowHeaderScroll.documentView = _rowHeaderView;
     [rowHeaderScroll.widthAnchor constraintEqualToConstant:42].active = YES;
 
@@ -373,6 +422,9 @@ void writeUiSmokeSuccess()
     _table.dataSource = self; _table.delegate = self; _table.allowsMultipleSelection = NO; _table.allowsEmptySelection = YES;
     _table.allowsColumnSelection = NO; _table.usesAlternatingRowBackgroundColors = YES; _table.rowHeight = 25; _table.intercellSpacing = NSMakeSize(1, 2);
     _table.selectionHighlightStyle = NSTableViewSelectionHighlightStyleNone;
+    SpreadsheetColumnHeaderView *headerView = [[SpreadsheetColumnHeaderView alloc] init];
+    headerView.spreadsheetController = self;
+    _table.headerView = headerView;
     for (NSInteger column = 0; column < Workbook::ColumnCount; ++column) {
         NSTableColumn *tableColumn = [[NSTableColumn alloc] initWithIdentifier:[NSString stringWithFormat:@"%ld", static_cast<long>(column)]];
         tableColumn.title = columnName(column); tableColumn.width = 102; tableColumn.minWidth = 72; tableColumn.editable = YES;
@@ -438,12 +490,29 @@ void writeUiSmokeSuccess()
     [_rowHeaderView setNeedsDisplay:YES];
 }
 
+- (void)refreshVisibleGridRendering
+{
+    for (NSInteger row = 0; row < Workbook::RowCount; ++row) {
+        for (NSInteger column = 0; column < Workbook::ColumnCount; ++column) {
+            SpreadsheetCellTextField *cell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:column row:row makeIfNecessary:NO]);
+            [cell setNeedsDisplay:YES];
+        }
+    }
+    [_table setNeedsDisplay:YES];
+    [_table.headerView setNeedsDisplay:YES];
+    [_rowHeaderView setNeedsDisplay:YES];
+    [self.window displayIfNeeded];
+}
+
 - (void)configureCell:(SpreadsheetCellTextField *)cell row:(NSInteger)row column:(NSInteger)column includeValue:(BOOL)includeValue
 {
     cell.spreadsheetController = self;
     cell.spreadsheetRow = row;
     cell.spreadsheetColumn = column;
-    if (includeValue) cell.stringValue = asNSString([self.workbookDocument workbook]->displayValue(static_cast<int>(row), static_cast<int>(column)));
+    const BOOL editing = [cell.currentEditor isKindOfClass:NSTextView.class]
+        && self.window.firstResponder == cell.currentEditor
+        && static_cast<NSTextView *>(cell.currentEditor).delegate == static_cast<id>(cell);
+    if (includeValue && !editing) cell.stringValue = asNSString([self.workbookDocument workbook]->displayValue(static_cast<int>(row), static_cast<int>(column)));
     const CellFormat format = [self.workbookDocument workbook]->cellFormat(static_cast<int>(row), static_cast<int>(column));
     NSFont *font = [NSFont fontWithName:asNSString(format.fontFamily) size:format.fontSize];
     if (!font) font = [NSFont systemFontOfSize:format.fontSize];
@@ -453,13 +522,15 @@ void writeUiSmokeSuccess()
     if (traits) font = [[NSFontManager sharedFontManager] convertFont:font toHaveTrait:traits];
     cell.font = font;
     cell.alignment = format.alignment == HorizontalAlignment::Center ? NSTextAlignmentCenter : format.alignment == HorizontalAlignment::Right ? NSTextAlignmentRight : NSTextAlignmentLeft;
-    if (format.underline) cell.attributedStringValue = [[NSAttributedString alloc] initWithString:cell.stringValue attributes:@{NSFontAttributeName: font, NSUnderlineStyleAttributeName: @(NSUnderlineStyleSingle)}];
-    else cell.attributedStringValue = [[NSAttributedString alloc] initWithString:cell.stringValue attributes:@{NSFontAttributeName: font}];
+    if (!editing) {
+        if (format.underline) cell.attributedStringValue = [[NSAttributedString alloc] initWithString:cell.stringValue attributes:@{NSFontAttributeName: font, NSUnderlineStyleAttributeName: @(NSUnderlineStyleSingle)}];
+        else cell.attributedStringValue = [[NSAttributedString alloc] initWithString:cell.stringValue attributes:@{NSFontAttributeName: font}];
+    }
 }
 
 - (id)tableView:(NSTableView *)tableView objectValueForTableColumn:(NSTableColumn *)column row:(NSInteger)row
 {
-    return asNSString([self.workbookDocument workbook]->rawValue(static_cast<int>(row), column.identifier.integerValue));
+    return asNSString([self.workbookDocument workbook]->displayValue(static_cast<int>(row), column.identifier.integerValue));
 }
 
 - (void)tableView:(NSTableView *)tableView setObjectValue:(id)object forTableColumn:(NSTableColumn *)column row:(NSInteger)row
@@ -491,6 +562,13 @@ void writeUiSmokeSuccess()
     if (notification.object == _formulaBar && !_formulaSession->isEditing()) {
         _formulaSession->begin({static_cast<int>(_activeRow), static_cast<int>(_activeColumn)}, [self.workbookDocument workbook]->rawValue(static_cast<int>(_activeRow), static_cast<int>(_activeColumn)));
     }
+}
+
+- (void)prepareCellForEditing:(SpreadsheetCellTextField *)cell
+{
+    const std::string raw = [self.workbookDocument workbook]->rawValue(static_cast<int>(cell.spreadsheetRow), static_cast<int>(cell.spreadsheetColumn));
+    cell.stringValue = asNSString(raw);
+    if ([cell.currentEditor isKindOfClass:NSTextView.class]) static_cast<NSTextView *>(cell.currentEditor).string = cell.stringValue;
 }
 
 - (void)controlTextDidChange:(NSNotification *)notification
@@ -535,6 +613,14 @@ void writeUiSmokeSuccess()
         const NSInteger movement = [notification.userInfo[@"NSTextMovement"] integerValue];
         if (_completingCellEdit) return;
         if (movement == NSCancelTextMovement) { [_table reloadData]; return; }
+        if (cell.spreadsheetRow != _activeRow || cell.spreadsheetColumn != _activeColumn) {
+            if ([self.workbookDocument workbook]->setRawValue(static_cast<int>(cell.spreadsheetRow), static_cast<int>(cell.spreadsheetColumn), asString(cell.stringValue))) {
+                [self.workbookDocument workbookDidChange];
+            }
+            [_table reloadData];
+            [self updateFormulaBar];
+            return;
+        }
         [self commitCellEditor:cell value:cell.stringValue advanceColumn:movement == NSTabTextMovement];
         return;
     }
@@ -557,6 +643,7 @@ void writeUiSmokeSuccess()
     else [self selectCellAtRow:row column:column];
     [_table reloadData];
     [self updateFormulaBar];
+    if (advanceColumn) [self beginEditingCellAtRow:_activeRow column:_activeColumn];
 }
 
 - (void)cancelCellEditing:(SpreadsheetCellTextField *)cell
@@ -574,7 +661,27 @@ void writeUiSmokeSuccess()
     _activeRow = row;
     _activeColumn = column;
     _selection.select({static_cast<int>(row), static_cast<int>(column)});
-    [_table setNeedsDisplay:YES];
+    [self refreshVisibleGridRendering];
+    [self updateFormulaBar];
+}
+
+- (void)handleRowHeaderMouseDownAtRow:(NSInteger)row
+{
+    if (_formulaSession->isEditing() || row < 0 || row >= Workbook::RowCount) return;
+    _selection.selectRow(static_cast<int>(row), static_cast<int>(_activeColumn), Workbook::ColumnCount);
+    _activeRow = _selection.activeCell().row;
+    _activeColumn = _selection.activeCell().column;
+    [self refreshVisibleGridRendering];
+    [self updateFormulaBar];
+}
+
+- (void)handleColumnHeaderMouseDownAtColumn:(NSInteger)column
+{
+    if (_formulaSession->isEditing() || column < 0 || column >= Workbook::ColumnCount) return;
+    _selection.selectColumn(static_cast<int>(column), static_cast<int>(_activeRow), Workbook::RowCount);
+    _activeRow = _selection.activeCell().row;
+    _activeColumn = _selection.activeCell().column;
+    [self refreshVisibleGridRendering];
     [self updateFormulaBar];
 }
 
@@ -592,7 +699,7 @@ void writeUiSmokeSuccess()
             _activeRow = row;
             _activeColumn = column;
             _selection.extendTo({static_cast<int>(row), static_cast<int>(column)});
-            [_table setNeedsDisplay:YES];
+            [self refreshVisibleGridRendering];
             [self updateFormulaBar];
         } else {
             [self selectCellAtRow:row column:column];
@@ -626,7 +733,7 @@ void writeUiSmokeSuccess()
     _selection.extendTo({static_cast<int>(row), static_cast<int>(column)});
     _activeRow = row;
     _activeColumn = column;
-    [_table setNeedsDisplay:YES];
+    [self refreshVisibleGridRendering];
     [self updateFormulaBar];
 }
 
@@ -662,6 +769,9 @@ void writeUiSmokeSuccess()
     return !_formulaSession->isEditing() && _selection.isActive({static_cast<int>(row), static_cast<int>(column)});
 }
 
+- (BOOL)isRowSelected:(NSInteger)row { return !_formulaSession->isEditing() && _selection.kind() == SelectionModel::Kind::EntireRow && _selection.range().first.row == row; }
+- (BOOL)isColumnSelected:(NSInteger)column { return !_formulaSession->isEditing() && _selection.kind() == SelectionModel::Kind::EntireColumn && _selection.range().first.column == column; }
+
 - (void)updateFormulaBar
 {
     if (_updatingFormulaBar || _formulaSession->isEditing() || _activeRow < 0 || _activeColumn < 0) return;
@@ -690,6 +800,15 @@ void writeUiSmokeSuccess()
         [self updateFormulaBar];
     }
     if (advanceColumn) [self selectCellAfterTabFromRow:destination.row column:destination.column];
+    if (advanceColumn) [self beginEditingCellAtRow:_activeRow column:_activeColumn];
+}
+
+- (void)beginEditingCellAtRow:(NSInteger)row column:(NSInteger)column
+{
+    [_table scrollRowToVisible:row];
+    [_table scrollColumnToVisible:column];
+    [_table layoutSubtreeIfNeeded];
+    [_table editColumn:column row:row withEvent:nil select:YES];
 }
 
 - (void)cancelFormulaBar
@@ -727,7 +846,7 @@ void writeUiSmokeSuccess()
             SpreadsheetCellTextField *cell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:column row:row makeIfNecessary:NO]);
             if (cell) [self configureCell:cell row:row column:column includeValue:NO];
         }
-        [_table setNeedsDisplay:YES];
+        [self refreshVisibleGridRendering];
         [self updateRibbonControls];
     }
 }
@@ -869,6 +988,76 @@ void writeUiSmokeSuccess()
     if (!require(std::abs(_worksheetScroll.contentView.bounds.origin.y - _rowHeaderScroll.contentView.bounds.origin.y) < 0.1,
             @"Row headers did not stay vertically synchronized with worksheet scrolling.")) return NO;
 
+    [self selectCellAtRow:4 column:2];
+    NSPoint rowHeaderPoint = [_rowHeaderView convertPoint:NSMakePoint(10, _rowHeaderView.tableHeaderHeight + 4 * _rowHeaderView.rowHeight + 4) toView:nil];
+    NSEvent *rowHeaderClick = [NSEvent mouseEventWithType:NSEventTypeLeftMouseDown location:rowHeaderPoint modifierFlags:0 timestamp:0
+        windowNumber:self.window.windowNumber context:nil eventNumber:0 clickCount:1 pressure:1.0];
+    [_rowHeaderView mouseDown:rowHeaderClick];
+    if (!require([self isRowSelected:4] && [self isActiveCellAtRow:4 column:2]
+            && [self isSelectedCellAtRow:4 column:0] && [self isSelectedCellAtRow:4 column:Workbook::ColumnCount - 1]
+            && ![self isSelectedCellAtRow:3 column:2], @"Row-header event did not select one whole row while preserving the active column.")) return NO;
+
+    const auto pixelDistance = ^CGFloat(NSBitmapImageRep *bitmap, NSInteger firstX, NSInteger firstY, NSInteger secondX, NSInteger secondY) {
+        NSColor *first = [[bitmap colorAtX:firstX y:firstY] colorUsingColorSpace:NSColorSpace.genericRGBColorSpace];
+        NSColor *second = [[bitmap colorAtX:secondX y:secondY] colorUsingColorSpace:NSColorSpace.genericRGBColorSpace];
+        return std::abs(first.redComponent - second.redComponent) + std::abs(first.greenComponent - second.greenComponent) + std::abs(first.blueComponent - second.blueComponent);
+    };
+    const auto maximumRowTintDistance = ^CGFloat(NSBitmapImageRep *bitmap, NSInteger width, NSInteger height, NSInteger selectedY, NSInteger unselectedY) {
+        CGFloat maximum = 0.0;
+        for (NSInteger x = 2; x < width - 2; ++x) {
+            for (NSInteger offset = 2; offset < static_cast<NSInteger>(std::floor(_rowHeaderView.rowHeight)) - 2; ++offset) {
+                maximum = std::max(maximum, pixelDistance(bitmap, x, selectedY + offset, x, unselectedY + offset));
+                maximum = std::max(maximum, pixelDistance(bitmap, x, height - selectedY - offset - 1, x, height - unselectedY - offset - 1));
+            }
+        }
+        return maximum;
+    };
+    const NSInteger rowHeaderWidth = static_cast<NSInteger>(std::ceil(NSWidth(_rowHeaderView.bounds)));
+    const NSInteger rowHeaderHeight = static_cast<NSInteger>(std::ceil(NSHeight(_rowHeaderView.bounds)));
+    NSBitmapImageRep *rowHeaderBitmap = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nullptr pixelsWide:rowHeaderWidth pixelsHigh:rowHeaderHeight bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:0 bitsPerPixel:0];
+    NSGraphicsContext *rowHeaderContext = [NSGraphicsContext graphicsContextWithBitmapImageRep:rowHeaderBitmap];
+    [NSGraphicsContext saveGraphicsState];
+    [NSGraphicsContext setCurrentContext:rowHeaderContext];
+    [_rowHeaderView drawRect:_rowHeaderView.bounds];
+    [rowHeaderContext flushGraphics];
+    [NSGraphicsContext restoreGraphicsState];
+    const NSInteger selectedRowY = static_cast<NSInteger>(std::floor(_rowHeaderView.tableHeaderHeight + 4 * _rowHeaderView.rowHeight));
+    const NSInteger unselectedRowY = static_cast<NSInteger>(std::floor(_rowHeaderView.tableHeaderHeight + 3 * _rowHeaderView.rowHeight));
+    if (!require(maximumRowTintDistance(rowHeaderBitmap, rowHeaderWidth, rowHeaderHeight, selectedRowY, unselectedRowY) > 0.08,
+            @"Row-header selection did not render its selected tint into an offscreen graphics context.")) return NO;
+
+    const NSRect headerRect = [_table.headerView headerRectOfColumn:3];
+    NSPoint columnHeaderPoint = [_table.headerView convertPoint:NSMakePoint(NSMidX(headerRect), NSMidY(headerRect)) toView:nil];
+    NSEvent *columnHeaderClick = [NSEvent mouseEventWithType:NSEventTypeLeftMouseDown location:columnHeaderPoint modifierFlags:0 timestamp:0
+        windowNumber:self.window.windowNumber context:nil eventNumber:0 clickCount:1 pressure:1.0];
+    [_table.headerView mouseDown:columnHeaderClick];
+    if (!require([self isColumnSelected:3] && [self isActiveCellAtRow:4 column:3]
+            && [self isSelectedCellAtRow:0 column:3] && [self isSelectedCellAtRow:Workbook::RowCount - 1 column:3]
+            && ![self isSelectedCellAtRow:4 column:2], @"Column-header event did not select one whole column while preserving the active row.")) return NO;
+    const NSInteger columnHeaderWidth = static_cast<NSInteger>(std::ceil(NSWidth(_table.headerView.bounds)));
+    const NSInteger columnHeaderHeight = static_cast<NSInteger>(std::ceil(NSHeight(_table.headerView.bounds)));
+    NSBitmapImageRep *columnHeaderBitmap = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nullptr pixelsWide:columnHeaderWidth pixelsHigh:columnHeaderHeight bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:0 bitsPerPixel:0];
+    NSGraphicsContext *columnHeaderContext = [NSGraphicsContext graphicsContextWithBitmapImageRep:columnHeaderBitmap];
+    [NSGraphicsContext saveGraphicsState];
+    [NSGraphicsContext setCurrentContext:columnHeaderContext];
+    [_table.headerView drawRect:_table.headerView.bounds];
+    [columnHeaderContext flushGraphics];
+    [NSGraphicsContext restoreGraphicsState];
+    const NSRect unselectedHeaderRect = [_table.headerView headerRectOfColumn:2];
+    CGFloat maximumColumnTintDistance = 0.0;
+    for (NSInteger y = 2; y < columnHeaderHeight - 2; ++y) {
+        for (NSInteger offset = 2; offset < static_cast<NSInteger>(std::floor(NSWidth(headerRect))) - 2; ++offset) {
+            maximumColumnTintDistance = std::max(maximumColumnTintDistance, pixelDistance(columnHeaderBitmap,
+                static_cast<NSInteger>(std::floor(NSMinX(headerRect))) + offset, y,
+                static_cast<NSInteger>(std::floor(NSMinX(unselectedHeaderRect))) + offset, y));
+        }
+    }
+    if (!require(maximumColumnTintDistance > 0.08,
+            @"Column-header selection did not render its selected tint into an offscreen graphics context.")) return NO;
+    [self selectCellAtRow:0 column:0];
+    if (!require(![self isRowSelected:4] && ![self isColumnSelected:3] && [self isActiveCellAtRow:0 column:0],
+            @"A normal cell selection did not clear header selection.")) return NO;
+
     // Regression: a ribbon action on an edited non-top cell must be a pure
     // formatting operation. The control intentionally declines first-responder
     // status, so the editor and logical selection remain in place.
@@ -895,6 +1084,10 @@ void writeUiSmokeSuccess()
     [_alignmentControl setSelected:YES forSegment:1]; [self changeAlignment:_alignmentControl];
     if (!require(workbook->rawValue(6, 1) == "center immediately" && centeredCell.alignment == NSTextAlignmentCenter,
             @"Center Alignment did not refresh the visible cell immediately without another edit.")) return NO;
+    [_alignmentControl setSelected:YES forSegment:2]; [self changeAlignment:_alignmentControl];
+    if (!require(centeredCell.alignment == NSTextAlignmentRight, @"Right Alignment did not refresh the visible cell immediately.")) return NO;
+    [_alignmentControl setSelected:YES forSegment:0]; [self changeAlignment:_alignmentControl];
+    if (!require(centeredCell.alignment == NSTextAlignmentLeft, @"Left Alignment did not refresh the visible cell immediately.")) return NO;
 
     [self tableView:_table setObjectValue:@"=SUM(A1,B1)" forTableColumn:thirdColumn row:5];
     [self selectCellAtRow:5 column:2];
