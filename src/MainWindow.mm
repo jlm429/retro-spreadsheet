@@ -124,6 +124,9 @@ void writeUiSmokeSuccess()
 - (void)configureCell:(SpreadsheetCellTextField *)cell row:(NSInteger)row column:(NSInteger)column includeValue:(BOOL)includeValue;
 - (void)syncRowHeaderGeometry;
 - (void)tableHeaderFrameDidChange:(NSNotification *)notification;
+- (void)commitCellEditor:(SpreadsheetCellTextField *)cell value:(NSString *)value advanceColumn:(BOOL)advanceColumn;
+- (void)cancelCellEditing:(SpreadsheetCellTextField *)cell;
+- (void)commitFormulaBarAdvancingColumn:(BOOL)advanceColumn;
 @end
 
 @implementation SpreadsheetTableView
@@ -203,11 +206,6 @@ void writeUiSmokeSuccess()
 @end
 
 @implementation FormulaBarTextField
-- (void)keyDown:(NSEvent *)event
-{
-    if (event.keyCode == 53) { [self.spreadsheetController cancelFormulaBar]; return; }
-    [super keyDown:event];
-}
 @end
 
 @interface WorkbookDocument : NSDocument
@@ -279,6 +277,7 @@ void writeUiSmokeSuccess()
 @property(nonatomic, strong) NSPopUpButton *functionControl;
 @property(nonatomic) BOOL updatingFormulaBar;
 @property(nonatomic) BOOL discardingFormulaEdit;
+@property(nonatomic) BOOL completingCellEdit;
 @property(nonatomic) NSInteger activeRow;
 @property(nonatomic) NSInteger activeColumn;
 @end
@@ -500,9 +499,24 @@ void writeUiSmokeSuccess()
 
 - (BOOL)control:(NSControl *)control textView:(NSTextView *)textView doCommandBySelector:(SEL)commandSelector
 {
-    if (control == _formulaBar && (commandSelector == @selector(insertNewline:) || commandSelector == @selector(insertLineBreak:))) {
+    if ([control isKindOfClass:SpreadsheetCellTextField.class]) {
+        SpreadsheetCellTextField *cell = static_cast<SpreadsheetCellTextField *>(control);
+        if (commandSelector == @selector(insertNewline:) || commandSelector == @selector(insertLineBreak:)) {
+            [self commitCellEditor:cell value:textView.string advanceColumn:NO];
+            return YES;
+        }
+        if (commandSelector == @selector(insertTab:)) {
+            [self commitCellEditor:cell value:textView.string advanceColumn:YES];
+            return YES;
+        }
+        if (commandSelector == @selector(cancelOperation:)) {
+            [self cancelCellEditing:cell];
+            return YES;
+        }
+    }
+    if (control == _formulaBar && (commandSelector == @selector(insertNewline:) || commandSelector == @selector(insertLineBreak:) || commandSelector == @selector(insertTab:))) {
         if (_formulaSession->isEditing()) _formulaSession->setDraft(asString(textView.string));
-        [self commitFormulaBar];
+        [self commitFormulaBarAdvancingColumn:commandSelector == @selector(insertTab:)];
         [self.window makeFirstResponder:_table];
         return YES;
     }
@@ -518,17 +532,38 @@ void writeUiSmokeSuccess()
     if ([notification.object isKindOfClass:SpreadsheetCellTextField.class]) {
         SpreadsheetCellTextField *cell = static_cast<SpreadsheetCellTextField *>(notification.object);
         const NSInteger movement = [notification.userInfo[@"NSTextMovement"] integerValue];
+        if (_completingCellEdit) return;
         if (movement == NSCancelTextMovement) { [_table reloadData]; return; }
-        [self tableView:_table setObjectValue:cell.stringValue forTableColumn:_table.tableColumns[cell.spreadsheetColumn] row:cell.spreadsheetRow];
+        [self commitCellEditor:cell value:cell.stringValue advanceColumn:movement == NSTabTextMovement];
         return;
     }
     if (notification.object != _formulaBar) return;
     if (_discardingFormulaEdit) { _discardingFormulaEdit = NO; return; }
-    if (!_formulaSession->isEditing()) return;
-    _formulaSession->setDraft(asString(_formulaBar.stringValue));
-    const NSInteger movement = [notification.userInfo[@"NSTextMovement"] integerValue];
-    if (movement == NSReturnTextMovement) [self commitFormulaBar];
-    else if (movement == NSCancelTextMovement) [self cancelFormulaBar];
+    // Focus transitions do not commit or cancel formula drafts. Return, Tab,
+    // and Escape use the explicit command path above.
+}
+
+- (void)commitCellEditor:(SpreadsheetCellTextField *)cell value:(NSString *)value advanceColumn:(BOOL)advanceColumn
+{
+    const NSInteger row = cell.spreadsheetRow;
+    const NSInteger column = cell.spreadsheetColumn;
+    const std::string committedValue = asString(value);
+    _completingCellEdit = YES;
+    [self.window makeFirstResponder:_table];
+    _completingCellEdit = NO;
+    if ([self.workbookDocument workbook]->setRawValue(static_cast<int>(row), static_cast<int>(column), committedValue)) [self.workbookDocument workbookDidChange];
+    [self selectCellAtRow:row column:advanceColumn ? std::min<NSInteger>(column + 1, Workbook::ColumnCount - 1) : column];
+    [_table reloadData];
+    [self updateFormulaBar];
+}
+
+- (void)cancelCellEditing:(SpreadsheetCellTextField *)cell
+{
+    _completingCellEdit = YES;
+    [self.window makeFirstResponder:_table];
+    _completingCellEdit = NO;
+    [self selectCellAtRow:cell.spreadsheetRow column:cell.spreadsheetColumn];
+    [_table reloadData];
 }
 
 - (void)selectCellAtRow:(NSInteger)row column:(NSInteger)column
@@ -628,7 +663,7 @@ void writeUiSmokeSuccess()
     [self updateRibbonControls];
 }
 
-- (void)commitFormulaBar
+- (void)commitFormulaBarAdvancingColumn:(BOOL)advanceColumn
 {
     if (_activeRow < 0 || _activeColumn < 0) return;
     const BOOL completedFormulaSession = _formulaSession->isEditing();
@@ -636,8 +671,7 @@ void writeUiSmokeSuccess()
         ? _formulaSession->destination() : FormulaEditingSession::Cell{static_cast<int>(_activeRow), static_cast<int>(_activeColumn)};
     const std::string value = completedFormulaSession ? _formulaSession->commit() : asString(_formulaBar.stringValue);
     _formulaBar.stringValue = asNSString(value);
-    _activeRow = destination.row;
-    _activeColumn = destination.column;
+    [self selectCellAtRow:destination.row column:destination.column];
     if ([self.workbookDocument workbook]->setRawValue(destination.row, destination.column, value)) {
         [self.workbookDocument workbookDidChange];
         [_table reloadData];
@@ -646,6 +680,7 @@ void writeUiSmokeSuccess()
         [_table reloadData];
         [self updateFormulaBar];
     }
+    if (advanceColumn) [self selectCellAtRow:destination.row column:std::min(destination.column + 1, Workbook::ColumnCount - 1)];
 }
 
 - (void)cancelFormulaBar
@@ -844,6 +879,14 @@ void writeUiSmokeSuccess()
             @"Center Alignment changed a non-top edited cell instead of only formatting it.")) return NO;
     [self.window makeFirstResponder:_table];
 
+    [self tableView:_table setObjectValue:@"center immediately" forTableColumn:secondColumn row:6];
+    [self selectCellAtRow:6 column:1];
+    [_table reloadData]; [_table layoutSubtreeIfNeeded];
+    SpreadsheetCellTextField *centeredCell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:1 row:6 makeIfNecessary:YES]);
+    [_alignmentControl setSelected:YES forSegment:1]; [self changeAlignment:_alignmentControl];
+    if (!require(workbook->rawValue(6, 1) == "center immediately" && centeredCell.alignment == NSTextAlignmentCenter,
+            @"Center Alignment did not refresh the visible cell immediately without another edit.")) return NO;
+
     [self tableView:_table setObjectValue:@"=SUM(A1,B1)" forTableColumn:thirdColumn row:5];
     [self selectCellAtRow:5 column:2];
     _selection.extendTo({5, 3});
@@ -909,7 +952,7 @@ void writeUiSmokeSuccess()
     _formulaBar.stringValue = editor.string;
     [self control:_formulaBar textView:editor doCommandBySelector:@selector(insertNewline:)];
     if (!require(workbook->rawValue(0, 3) == "=C1*B1" && workbook->displayValue(0, 3) == "15", @"Return did not commit and recalculate the formula bar draft.")) return NO;
-    if (!require(_statusField.stringValue.length == 0 && !_formulaSession->isEditing(), @"Formula commit did not clear editing status.")) return NO;
+    if (!require(_statusField.stringValue.length == 0 && !_formulaSession->isEditing() && _activeRow == 0 && _activeColumn == 3, @"Formula Return did not retain the active destination cell.")) return NO;
 
     [self selectCellAtRow:0 column:4];
     workbook->setRawValue(0, 4, "keep");
@@ -919,8 +962,7 @@ void writeUiSmokeSuccess()
     if (!require(editor != nil && _formulaSession->isEditing(), @"Formula bar did not start the Escape test session.")) return NO;
     editor.string = @"discard";
     _formulaBar.stringValue = editor.string;
-    NSEvent *escape = [NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint modifierFlags:0 timestamp:0 windowNumber:self.window.windowNumber context:nil characters:@"\x1b" charactersIgnoringModifiers:@"\x1b" isARepeat:NO keyCode:53];
-    [_formulaBar keyDown:escape];
+    [self control:_formulaBar textView:editor doCommandBySelector:@selector(cancelOperation:)];
     if (!require(workbook->rawValue(0, 4) == "keep" && _formulaBar.stringValue.length == 4 && _statusField.stringValue.length == 0, @"Escape did not restore the original formula-bar content.")) return NO;
 
     [self selectCellAtRow:0 column:5];
@@ -958,6 +1000,34 @@ void writeUiSmokeSuccess()
     if (!require(!self.workbookDocument.isDocumentEdited, @"Undo to the saved workbook state left the document dirty.")) return NO;
     [self redo:nil];
     if (!require(self.workbookDocument.isDocumentEdited, @"Redo from the saved workbook state did not mark the document dirty.")) return NO;
+
+    [self selectCellAtRow:7 column:0];
+    [_table reloadData]; [_table layoutSubtreeIfNeeded];
+    SpreadsheetCellTextField *tabCell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:0 row:7 makeIfNecessary:YES]);
+    [tabCell selectText:nil];
+    NSTextView *cellEditor = static_cast<NSTextView *>(tabCell.currentEditor);
+    cellEditor.string = @"Tab commit";
+    [self control:tabCell textView:cellEditor doCommandBySelector:@selector(insertTab:)];
+    if (!require(workbook->rawValue(7, 0) == "Tab commit" && _activeRow == 7 && _activeColumn == 1,
+            @"Cell Tab did not commit once and move exactly one column right.")) return NO;
+    [_table reloadData]; [_table layoutSubtreeIfNeeded];
+    SpreadsheetCellTextField *returnCell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:1 row:7 makeIfNecessary:YES]);
+    [returnCell selectText:nil];
+    cellEditor = static_cast<NSTextView *>(returnCell.currentEditor);
+    cellEditor.string = @"Return commit";
+    [self control:returnCell textView:cellEditor doCommandBySelector:@selector(insertNewline:)];
+    if (!require(workbook->rawValue(7, 1) == "Return commit" && _activeRow == 7 && _activeColumn == 1,
+            @"Cell Return did not commit once while retaining the active cell.")) return NO;
+    [_table reloadData]; [_table layoutSubtreeIfNeeded];
+    [self tableView:_table setObjectValue:@"keep cell" forTableColumn:thirdColumn row:7];
+    [_table reloadData]; [_table layoutSubtreeIfNeeded];
+    SpreadsheetCellTextField *escapeCell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:2 row:7 makeIfNecessary:YES]);
+    [escapeCell selectText:nil];
+    cellEditor = static_cast<NSTextView *>(escapeCell.currentEditor);
+    cellEditor.string = @"discard cell";
+    [self control:escapeCell textView:cellEditor doCommandBySelector:@selector(cancelOperation:)];
+    if (!require(workbook->rawValue(7, 2) == "keep cell" && _activeRow == 7 && _activeColumn == 2,
+            @"Cell Escape did not discard the draft without moving the active cell.")) return NO;
 
     [self selectCellAtRow:0 column:2];
     if (!require([_formulaBar.stringValue isEqualToString:@"=SUM(A1,B1)"], @"Formula bar did not return the active cell raw contents after selection.")) return NO;

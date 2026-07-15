@@ -18,6 +18,36 @@ TEST(Workbook_RecalculatesDependentCells)
     REQUIRE_EQUAL(workbook.displayValue(0, 2), "10");
 }
 
+TEST(Workbook_PreservesRawFormulasAndRecalculatesSupportedFunctionsAfterUndoRedo)
+{
+    Workbook workbook;
+    REQUIRE(workbook.setRawValue(0, 0, "2"));
+    REQUIRE(workbook.setRawValue(0, 1, "3"));
+    REQUIRE(workbook.setRawValue(0, 2, "=A1"));
+    REQUIRE(workbook.setRawValue(0, 3, "=A1+B1"));
+    REQUIRE(workbook.setRawValue(0, 4, "=SUM(A1:B1)"));
+    REQUIRE(workbook.setRawValue(0, 5, "=AVERAGE(A1:B1)"));
+    REQUIRE(workbook.setRawValue(0, 6, "=MIN(A1:B1)"));
+    REQUIRE(workbook.setRawValue(0, 7, "=MAX(A1:B1)"));
+    REQUIRE(workbook.setRawValue(0, 8, "=COUNT(A1:B1)"));
+    REQUIRE_EQUAL(workbook.rawValue(0, 4), "=SUM(A1:B1)");
+    REQUIRE_EQUAL(workbook.displayValue(0, 2), "2");
+    REQUIRE_EQUAL(workbook.displayValue(0, 3), "5");
+    REQUIRE_EQUAL(workbook.displayValue(0, 4), "5");
+    REQUIRE_EQUAL(workbook.displayValue(0, 5), "2.5");
+    REQUIRE_EQUAL(workbook.displayValue(0, 6), "2");
+    REQUIRE_EQUAL(workbook.displayValue(0, 7), "3");
+    REQUIRE_EQUAL(workbook.displayValue(0, 8), "2");
+
+    REQUIRE(workbook.setRawValue(0, 0, "5"));
+    REQUIRE_EQUAL(workbook.displayValue(0, 3), "8");
+    REQUIRE_EQUAL(workbook.displayValue(0, 4), "8");
+    REQUIRE(workbook.undo());
+    REQUIRE_EQUAL(workbook.displayValue(0, 3), "5");
+    REQUIRE(workbook.redo());
+    REQUIRE_EQUAL(workbook.displayValue(0, 3), "8");
+}
+
 TEST(Workbook_RejectsOutOfBoundsCellAccess)
 {
     Workbook workbook;

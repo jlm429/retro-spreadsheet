@@ -4,6 +4,13 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Routed native grid and formula-bar Return, Tab, and Escape through one explicit
+  commit or cancel path. Return retains the active cell, Tab advances one column,
+  and the local AppKit workflow now verifies immediate Center Alignment refresh
+  without a follow-up edit.
+- Added portable regression coverage for raw formula source, evaluated values,
+  supported functions, dependent recalculation, undo, and redo.
+
 - Reorganized coding-agent guidance into concise repository-wide rules and
   focused skills for spreadsheet core behavior, formulas, AppKit interaction,
   and testing.
