@@ -42,3 +42,19 @@ new guidance unless they are sourced from these files.
 - Run the applicable portable tests. Run local AppKit tests in an interactive
   macOS session after UI changes.
 - A successful compile is not validation of UI behavior.
+
+## Human UI validation fallback
+
+Automated local AppKit testing is preferred. Use manual validation only as a
+last resort when a native interaction cannot reasonably be exercised or
+observed reliably by the agent. Do not ask the user to manually run every UI
+test.
+
+When automated validation is genuinely blocked, explain why, provide the exact
+application launch instructions if needed, and request a focused numbered test
+of fewer than 10 steps. State the expected behavior and ask the user to report
+the first unexpected behavior.
+
+After receiving the result, continue implementation using that information,
+add automated regression coverage wherever practical, and do not ask the user
+to repeat the same workflow unless the behavior has materially changed.
