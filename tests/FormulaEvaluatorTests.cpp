@@ -99,12 +99,14 @@ TEST(FormulaEvaluator_EvaluatesAllFunctionsWithCommaArgumentsAndWhitespace)
 
 TEST(FormulaEvaluator_PreservesBlankAndTextAggregateSemantics)
 {
-    const auto values = grid({{"", "text", "=SUM(A1)", "=COUNT(A1:B1)", "=AVERAGE(A1)", "=SUM(B1)"}});
+    const auto values = grid({{"", "text", "=SUM(A1)", "=COUNT(A1:B1)", "=AVERAGE(A1)", "=SUM(B1)", "=SUM( )", "=COUNT( \t)"}});
     const FormulaEvaluator evaluator(values);
     REQUIRE_EQUAL(evaluator.evaluateCell(0, 2), "0");
     REQUIRE_EQUAL(evaluator.evaluateCell(0, 3), "0");
     REQUIRE_EQUAL(evaluator.evaluateCell(0, 4), "#FORMULA!");
     REQUIRE_EQUAL(evaluator.evaluateCell(0, 5), "#VALUE!");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 6), "0");
+    REQUIRE_EQUAL(evaluator.evaluateCell(0, 7), "0");
 }
 
 TEST(FormulaEvaluator_ReportsMalformedUnknownAndReferenceErrors)

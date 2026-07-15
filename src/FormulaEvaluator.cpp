@@ -101,7 +101,9 @@ std::string FormulaEvaluator::evaluateAggregate(const std::string &formula, cons
 bool FormulaEvaluator::evaluateRangeArguments(const std::string &arguments, std::vector<std::vector<bool>> &visiting,
                                               double &total, int &count, bool ignoreText) const
 {
-    if (!trim(arguments).empty() && (trim(arguments).front() == ',' || trim(arguments).back() == ',')) {
+    const std::string trimmedArguments = trim(arguments);
+    if (trimmedArguments.empty()) return true;
+    if (trimmedArguments.front() == ',' || trimmedArguments.back() == ',') {
         count = -2;
         return false;
     }
@@ -126,7 +128,7 @@ bool FormulaEvaluator::evaluateRangeArguments(const std::string &arguments, std:
             ++count;
         }
     }
-    return any || trim(arguments).empty();
+    return any;
 }
 
 bool FormulaEvaluator::parseRange(const std::string &text, int &firstRow, int &firstColumn, int &lastRow, int &lastColumn) const
