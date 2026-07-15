@@ -1,6 +1,7 @@
 #define RETRO_SPREADSHEET_TEST_MAIN
 #include "TestHarness.h"
 #include "RetroSpreadsheet/Workbook.h"
+#include "RetroSpreadsheet/SelectionModel.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -129,6 +130,30 @@ TEST(Workbook_PreservesPortableCellFormattingThroughUndoRedoAndRecalculation)
     REQUIRE(workbook.cellFormat(0, 0) == CellFormat{});
     REQUIRE(workbook.redo());
     REQUIRE(workbook.cellFormat(0, 0) == format);
+}
+
+TEST(Workbook_FormattingPreservesRawContentsFormulaAndLogicalSelection)
+{
+    Workbook workbook;
+    workbook.setRawValue(4, 2, "value");
+    workbook.setRawValue(4, 3, "=C5");
+    SelectionModel selection({4, 2});
+    selection.extendTo({4, 4});
+    CellFormat format;
+    format.bold = true;
+    format.alignment = HorizontalAlignment::Center;
+
+    REQUIRE(workbook.setFormatRange(4, 2, 4, 4, format));
+    REQUIRE_EQUAL(workbook.rawValue(4, 2), "value");
+    REQUIRE_EQUAL(workbook.rawValue(4, 3), "=C5");
+    REQUIRE_EQUAL(workbook.rawValue(4, 4), "");
+    REQUIRE(workbook.cellFormat(4, 2) == format);
+    REQUIRE(workbook.cellFormat(4, 3) == format);
+    REQUIRE(selection.activeCell().row == 4 && selection.activeCell().column == 4);
+    REQUIRE(workbook.undo());
+    REQUIRE_EQUAL(workbook.rawValue(4, 3), "=C5");
+    REQUIRE(workbook.redo());
+    REQUIRE(workbook.cellFormat(4, 4) == format);
 }
 
 TEST(Workbook_CsvDoesNotPersistFormatting)

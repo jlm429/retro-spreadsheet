@@ -11,9 +11,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_library(RetroSpreadsheetCore STATIC
     src/FormulaEvaluator.cpp
     src/FormulaEditingSession.cpp
+    src/SelectionModel.cpp
     src/Workbook.cpp
     include/RetroSpreadsheet/FormulaEditingSession.h
     include/RetroSpreadsheet/FormulaEvaluator.h
+    include/RetroSpreadsheet/SelectionModel.h
     include/RetroSpreadsheet/Workbook.h
 )
 target_include_directories(RetroSpreadsheetCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -71,13 +73,13 @@ if(BUILD_TESTING)
             RUN_SERIAL TRUE
             ENVIRONMENT "RETRO_SPREADSHEET_UI_ARTIFACTS=${CMAKE_BINARY_DIR}/ui-test-artifacts"
         )
-        add_test(NAME RetroSpreadsheetUiEndToEnd
+        add_test(NAME RetroSpreadsheetUiRibbonRegression
             COMMAND ${CMAKE_COMMAND}
                 -DRETRO_SPREADSHEET_APP=$<TARGET_BUNDLE_DIR:RetroSpreadsheet>
                 -DRETRO_SPREADSHEET_UI_ARTIFACTS=${CMAKE_BINARY_DIR}/ui-e2e-test-artifacts
                 -DRETRO_SPREADSHEET_UI_ARGUMENT=--ui-e2e-test
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunUiSmoke.cmake)
-        set_tests_properties(RetroSpreadsheetUiEndToEnd PROPERTIES
+        set_tests_properties(RetroSpreadsheetUiRibbonRegression PROPERTIES
             TIMEOUT 15
             LABELS "ui;local;integration"
             RUN_SERIAL TRUE
