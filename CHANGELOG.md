@@ -4,6 +4,9 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Applied a visual-only warm retro paper theme across the native AppKit
+  worksheet, controls, selection states, formula references, and status
+  surfaces, with its palette centralized outside the portable workbook core.
 - Polished the compact native ribbon with accessible SF Symbol alignment
   controls and a Sigma function menu, and replaced the formula marker with a
   noninteractive italic `ƒx` label.
