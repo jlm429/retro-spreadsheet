@@ -4,6 +4,11 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Fixed native worksheet Tab navigation to end the current shared field-editor
+  session, move the logical selection once, and retain worksheet keyboard
+  ownership. Repeated formula and value Tabs now keep the formula bar out of
+  the responder path, preserve raw formulas, wrap correctly, and begin editing
+  the destination only when the user types.
 - Routed native grid and formula-bar Return, Tab, and Escape through one explicit
   commit or cancel path. Return retains the active cell, and Tab advances one
   column, wrapping from the final column to column A of the next row while the
