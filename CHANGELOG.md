@@ -4,6 +4,9 @@ All notable project changes should be recorded here as they are made.
 
 ## Unreleased
 
+- Polished the compact native ribbon with accessible SF Symbol alignment
+  controls and a Sigma function menu, and replaced the formula marker with a
+  noninteractive italic `ƒx` label.
 - Fixed native worksheet Tab navigation to end the current shared field-editor
   session, move the logical selection once, and retain worksheet keyboard
   ownership. Repeated formula and value Tabs now keep the formula bar out of
