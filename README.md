@@ -1,7 +1,7 @@
 # Retro Spreadsheet
 
 <p align="center">
-  insert image
+  <img src="docs/images/retro-spreadsheet.png" width="900" alt="Retro Spreadsheet">
 </p>
 
 <p align="center">
@@ -58,17 +58,3 @@ ctest --test-dir build
 
 Linux CI runs only the portable engine tests. Native AppKit UI tests are executed locally on macOS.
 
----
-
-## Agentic Engineering
-
-Retro Spreadsheet is built using an **agents-first engineering workflow**.
-
-Repository-wide engineering principles live in **AGENTS.md**.
-
-Specialized engineering knowledge is organized into focused project skills under **`.agents/skills/`**. These skills are loaded only when relevant and provide guidance for areas such as:
-
-- Spreadsheet engine development
-- Formula evaluation
-- Native AppKit UI
-- Testing and validation
