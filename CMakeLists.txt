@@ -34,6 +34,8 @@ if(RETRO_SPREADSHEET_BUILD_APP)
 
     add_executable(RetroSpreadsheet MACOSX_BUNDLE
         src/main.cpp
+        src/AppKitTheme.h
+        src/AppKitTheme.mm
         src/MainWindow.mm
         include/RetroSpreadsheet/MainWindow.h
         resources/Info.plist

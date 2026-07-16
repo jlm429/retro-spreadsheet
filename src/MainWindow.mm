@@ -1,5 +1,7 @@
 #import <AppKit/AppKit.h>
 
+#import "AppKitTheme.h"
+
 #include "RetroSpreadsheet/MainWindow.h"
 #include "RetroSpreadsheet/FormulaEditingSession.h"
 #include "RetroSpreadsheet/SelectionModel.h"
@@ -156,6 +158,7 @@ void writeUiSmokeSuccess()
 - (void)cancelCellEditing:(SpreadsheetCellTextField *)cell;
 - (void)commitFormulaBarAdvancingColumn:(BOOL)advanceColumn;
 - (void)selectCellAfterTabFromRow:(NSInteger)row column:(NSInteger)column;
+- (void)applyThemeToEditor:(NSTextView *)editor;
 @end
 
 @implementation SpreadsheetTableView
@@ -207,15 +210,17 @@ void writeUiSmokeSuccess()
 {
     const BOOL reference = [self.spreadsheetController isReferenceCellAtRow:_spreadsheetRow column:_spreadsheetColumn];
     const BOOL selected = [self.spreadsheetController isSelectedCellAtRow:_spreadsheetRow column:_spreadsheetColumn];
-    if (reference) [[NSColor.systemOrangeColor colorWithAlphaComponent:0.20] setFill];
-    else if (selected) [[NSColor.selectedControlColor colorWithAlphaComponent:0.18] setFill];
+    [[SpreadsheetTheme worksheetBackground] setFill];
+    NSRectFill(self.bounds);
+    if (reference) [[SpreadsheetTheme formulaReferenceFill] setFill];
+    else if (selected) [[SpreadsheetTheme selectionFill] setFill];
     if (reference || selected) NSRectFill(self.bounds);
     [super drawRect:dirtyRect];
     if (reference) {
-        [NSColor.systemOrangeColor setStroke];
+        [[SpreadsheetTheme formulaReferenceBorder] setStroke];
         NSFrameRectWithWidth(self.bounds, 2.0);
     } else if ([self.spreadsheetController isActiveCellAtRow:_spreadsheetRow column:_spreadsheetColumn]) {
-        [NSColor.keyboardFocusIndicatorColor setStroke];
+        [[SpreadsheetTheme activeCellBorder] setStroke];
         NSFrameRectWithWidth(self.bounds, 2.0);
     }
 }
@@ -228,23 +233,23 @@ void writeUiSmokeSuccess()
 
 - (void)drawRect:(NSRect)dirtyRect
 {
-    [NSColor.controlBackgroundColor setFill];
+    [[SpreadsheetTheme headerBackground] setFill];
     NSRectFill(dirtyRect);
     const CGFloat headerHeight = _tableHeaderHeight;
     const CGFloat rowHeight = _rowHeight;
     const NSInteger firstRow = std::max<NSInteger>(0, static_cast<NSInteger>(std::floor((NSMinY(dirtyRect) - headerHeight) / rowHeight)));
     const NSInteger lastRow = std::min<NSInteger>(Workbook::RowCount - 1, static_cast<NSInteger>(std::ceil((NSMaxY(dirtyRect) - headerHeight) / rowHeight)));
-    NSDictionary *attributes = @{NSFontAttributeName: [NSFont systemFontOfSize:12], NSForegroundColorAttributeName: NSColor.secondaryLabelColor};
+    NSDictionary *attributes = @{NSFontAttributeName: [NSFont systemFontOfSize:12], NSForegroundColorAttributeName: SpreadsheetTheme.secondaryText};
     for (NSInteger row = firstRow; row <= lastRow; ++row) {
         const CGFloat y = headerHeight + row * rowHeight;
         if ([self.spreadsheetController isRowSelected:row]) {
-            [[NSColor.selectedControlColor colorWithAlphaComponent:0.22] setFill];
+            [[SpreadsheetTheme selectionFill] setFill];
             NSRectFill(NSMakeRect(0, y, NSWidth(self.bounds), rowHeight));
         }
         const NSString *text = [self textForRow:row];
         const NSSize size = [text sizeWithAttributes:attributes];
         [text drawAtPoint:NSMakePoint(NSWidth(self.bounds) - size.width - 6.0, y + (rowHeight - size.height) / 2.0) withAttributes:attributes];
-        [NSColor.separatorColor setFill];
+        [[SpreadsheetTheme gridLine] setFill];
         NSRectFill(NSMakeRect(0, y + rowHeight - 1.0, NSWidth(self.bounds), 1.0));
     }
 }
@@ -263,7 +268,7 @@ void writeUiSmokeSuccess()
     [super drawRect:dirtyRect];
     for (NSInteger column = 0; column < self.tableView.numberOfColumns; ++column) {
         if (![self.spreadsheetController isColumnSelected:column]) continue;
-        [[NSColor.selectedControlColor colorWithAlphaComponent:0.22] setFill];
+        [[[SpreadsheetTheme selectionFill] colorWithAlphaComponent:0.72] setFill];
         NSRectFill([self headerRectOfColumn:column]);
     }
 }
@@ -365,6 +370,7 @@ void writeUiSmokeSuccess()
     if (self) {
         _workbookDocument = document;
         _formulaSession = std::make_unique<FormulaEditingSession>();
+        window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
         window.titleVisibility = NSWindowTitleVisible;
         window.minSize = NSMakeSize(700, 420);
         [self buildInterface];
@@ -375,6 +381,8 @@ void writeUiSmokeSuccess()
 - (void)buildInterface
 {
     NSView *content = self.window.contentView;
+    content.wantsLayer = YES;
+    content.layer.backgroundColor = SpreadsheetTheme.worksheetBackground.CGColor;
     NSStackView *stack = [NSStackView stackViewWithViews:@[]];
     stack.orientation = NSUserInterfaceLayoutOrientationVertical;
     stack.spacing = 0;
@@ -387,7 +395,7 @@ void writeUiSmokeSuccess()
 
     NSView *ribbon = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 0, 34)];
     ribbon.wantsLayer = YES;
-    ribbon.layer.backgroundColor = NSColor.controlBackgroundColor.CGColor;
+    ribbon.layer.backgroundColor = SpreadsheetTheme.toolbarBackground.CGColor;
     _fontFamilyControl = [[RibbonPopUpButton alloc] init];
     [_fontFamilyControl addItemsWithTitles:@[@"Helvetica", @"Times-Roman", @"Courier"]];
     _fontFamilyControl.target = self; _fontFamilyControl.action = @selector(changeFontFamily:); _fontFamilyControl.translatesAutoresizingMaskIntoConstraints = NO;
@@ -397,6 +405,7 @@ void writeUiSmokeSuccess()
     _styleControl = [[RibbonSegmentedControl alloc] initWithFrame:NSZeroRect];
     _styleControl.segmentCount = 3; [_styleControl setLabel:@"B" forSegment:0]; [_styleControl setLabel:@"I" forSegment:1]; [_styleControl setLabel:@"U" forSegment:2];
     _styleControl.trackingMode = NSSegmentSwitchTrackingSelectAny; _styleControl.target = self; _styleControl.action = @selector(changeStyle:); _styleControl.segmentStyle = NSSegmentStyleSmallSquare; _styleControl.translatesAutoresizingMaskIntoConstraints = NO;
+    _styleControl.selectedSegmentBezelColor = SpreadsheetTheme.ribbonSelectionFill;
     _alignmentControl = [[RibbonSegmentedControl alloc] initWithFrame:NSZeroRect];
     _alignmentControl.segmentCount = 3;
     const NSArray<NSString *> *alignmentSymbolNames = @[@"text.alignleft", @"text.aligncenter", @"text.alignright"];
@@ -409,10 +418,15 @@ void writeUiSmokeSuccess()
         [_alignmentControl setToolTip:alignmentLabels[segment] forSegment:segment];
     }
     _alignmentControl.trackingMode = NSSegmentSwitchTrackingSelectOne; _alignmentControl.target = self; _alignmentControl.action = @selector(changeAlignment:); _alignmentControl.segmentStyle = NSSegmentStyleSmallSquare; _alignmentControl.translatesAutoresizingMaskIntoConstraints = NO;
+    _alignmentControl.selectedSegmentBezelColor = SpreadsheetTheme.ribbonSelectionFill;
     _functionControl = [[RibbonPopUpButton alloc] init];
     [_functionControl addItemsWithTitles:@[@"∑", @"SUM", @"AVERAGE", @"MIN", @"MAX", @"COUNT"]];
     _functionControl.accessibilityLabel = @"Functions";
     _functionControl.target = self; _functionControl.action = @selector(insertFunction:); _functionControl.translatesAutoresizingMaskIntoConstraints = NO;
+    for (NSControl *control in @[_fontFamilyControl, _fontSizeControl, _styleControl, _alignmentControl, _functionControl]) {
+        control.wantsLayer = YES;
+        control.layer.backgroundColor = SpreadsheetTheme.toolbarBackground.CGColor;
+    }
     [ribbon addSubview:_fontFamilyControl]; [ribbon addSubview:_fontSizeControl]; [ribbon addSubview:_styleControl]; [ribbon addSubview:_alignmentControl]; [ribbon addSubview:_functionControl];
     [NSLayoutConstraint activateConstraints:@[
         [ribbon.heightAnchor constraintEqualToConstant:34], [_fontFamilyControl.leadingAnchor constraintEqualToAnchor:ribbon.leadingAnchor constant:10], [_fontFamilyControl.widthAnchor constraintEqualToConstant:128], [_fontFamilyControl.centerYAnchor constraintEqualToAnchor:ribbon.centerYAnchor],
@@ -424,13 +438,15 @@ void writeUiSmokeSuccess()
     [stack addArrangedSubview:ribbon];
 
     NSView *formulaRow = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 0, 38)];
+    formulaRow.wantsLayer = YES;
+    formulaRow.layer.backgroundColor = SpreadsheetTheme.formulaBarBackground.CGColor;
     _formulaSymbolLabel = [NSTextField labelWithString:@"ƒx"];
     NSFont *formulaSymbolFont = [NSFont fontWithName:@"Times-Italic" size:16];
     _formulaSymbolLabel.font = formulaSymbolFont ? formulaSymbolFont : [NSFont systemFontOfSize:16];
-    _formulaSymbolLabel.alignment = NSTextAlignmentCenter; _formulaSymbolLabel.editable = NO; _formulaSymbolLabel.selectable = NO; _formulaSymbolLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _formulaSymbolLabel.alignment = NSTextAlignmentCenter; _formulaSymbolLabel.textColor = SpreadsheetTheme.secondaryText; _formulaSymbolLabel.editable = NO; _formulaSymbolLabel.selectable = NO; _formulaSymbolLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _formulaBar = [[FormulaBarTextField alloc] init];
     _formulaBar.spreadsheetController = self;
-    _formulaBar.placeholderString = @"Enter a value or formula"; _formulaBar.delegate = self; _formulaBar.translatesAutoresizingMaskIntoConstraints = NO;
+    _formulaBar.placeholderString = @"Enter a value or formula"; _formulaBar.delegate = self; _formulaBar.drawsBackground = YES; _formulaBar.backgroundColor = SpreadsheetTheme.formulaBarBackground; _formulaBar.textColor = SpreadsheetTheme.primaryText; _formulaBar.translatesAutoresizingMaskIntoConstraints = NO;
     [formulaRow addSubview:_formulaSymbolLabel]; [formulaRow addSubview:_formulaBar];
     [NSLayoutConstraint activateConstraints:@[
         [formulaRow.heightAnchor constraintEqualToConstant:38], [_formulaSymbolLabel.leadingAnchor constraintEqualToAnchor:formulaRow.leadingAnchor constant:12],
@@ -445,6 +461,9 @@ void writeUiSmokeSuccess()
     gridRow.spacing = 0;
     NSScrollView *rowHeaderScroll = [[NSScrollView alloc] init];
     rowHeaderScroll.hasVerticalScroller = NO; rowHeaderScroll.hasHorizontalScroller = NO; rowHeaderScroll.borderType = NSBezelBorder;
+    rowHeaderScroll.wantsLayer = YES;
+    rowHeaderScroll.layer.borderColor = SpreadsheetTheme.separator.CGColor;
+    rowHeaderScroll.layer.borderWidth = 1.0;
     _rowHeaderView = [[SpreadsheetRowHeaderView alloc] initWithFrame:NSMakeRect(0, 0, 42, 0)];
     _rowHeaderView.spreadsheetController = self;
     rowHeaderScroll.documentView = _rowHeaderView;
@@ -452,10 +471,13 @@ void writeUiSmokeSuccess()
 
     NSScrollView *scroll = [[NSScrollView alloc] init];
     scroll.hasVerticalScroller = YES; scroll.hasHorizontalScroller = YES; scroll.borderType = NSBezelBorder;
+    scroll.wantsLayer = YES;
+    scroll.layer.borderColor = SpreadsheetTheme.separator.CGColor;
+    scroll.layer.borderWidth = 1.0;
     _table = [[SpreadsheetTableView alloc] init];
     static_cast<SpreadsheetTableView *>(_table).spreadsheetController = self;
     _table.dataSource = self; _table.delegate = self; _table.allowsMultipleSelection = NO; _table.allowsEmptySelection = YES;
-    _table.allowsColumnSelection = NO; _table.usesAlternatingRowBackgroundColors = YES; _table.rowHeight = 25; _table.intercellSpacing = NSMakeSize(1, 2);
+    _table.allowsColumnSelection = NO; _table.usesAlternatingRowBackgroundColors = NO; _table.backgroundColor = SpreadsheetTheme.gridLine; _table.rowHeight = 25; _table.intercellSpacing = NSMakeSize(1, 1);
     _table.selectionHighlightStyle = NSTableViewSelectionHighlightStyleNone;
     SpreadsheetColumnHeaderView *headerView = [[SpreadsheetColumnHeaderView alloc] init];
     headerView.spreadsheetController = self;
@@ -463,6 +485,9 @@ void writeUiSmokeSuccess()
     for (NSInteger column = 0; column < Workbook::ColumnCount; ++column) {
         NSTableColumn *tableColumn = [[NSTableColumn alloc] initWithIdentifier:[NSString stringWithFormat:@"%ld", static_cast<long>(column)]];
         tableColumn.title = columnName(column); tableColumn.width = 102; tableColumn.minWidth = 72; tableColumn.editable = YES;
+        tableColumn.headerCell.drawsBackground = YES;
+        tableColumn.headerCell.backgroundColor = SpreadsheetTheme.headerBackground;
+        tableColumn.headerCell.textColor = SpreadsheetTheme.primaryText;
         [_table addTableColumn:tableColumn];
     }
     scroll.documentView = _table;
@@ -478,8 +503,10 @@ void writeUiSmokeSuccess()
     [stack addArrangedSubview:gridRow];
 
     NSView *statusRow = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 0, 26)];
+    statusRow.wantsLayer = YES;
+    statusRow.layer.backgroundColor = SpreadsheetTheme.toolbarBackground.CGColor;
     _statusField = [NSTextField labelWithString:@"Ready"];
-    _statusField.font = [NSFont systemFontOfSize:12]; _statusField.textColor = NSColor.secondaryLabelColor; _statusField.translatesAutoresizingMaskIntoConstraints = NO;
+    _statusField.font = [NSFont systemFontOfSize:12]; _statusField.textColor = SpreadsheetTheme.secondaryText; _statusField.translatesAutoresizingMaskIntoConstraints = NO;
     [statusRow addSubview:_statusField];
     [NSLayoutConstraint activateConstraints:@[[statusRow.heightAnchor constraintEqualToConstant:26], [_statusField.leadingAnchor constraintEqualToAnchor:statusRow.leadingAnchor constant:12], [_statusField.centerYAnchor constraintEqualToAnchor:statusRow.centerYAnchor]]];
     [stack addArrangedSubview:statusRow];
@@ -495,8 +522,8 @@ void writeUiSmokeSuccess()
 {
     SpreadsheetCellTextField *cell = [tableView makeViewWithIdentifier:@"SpreadsheetCell" owner:self];
     if (!cell) {
-        cell = [[SpreadsheetCellTextField alloc] init]; cell.identifier = @"SpreadsheetCell"; cell.bordered = NO; cell.backgroundColor = NSColor.clearColor;
-        cell.lineBreakMode = NSLineBreakByTruncatingTail; cell.editable = YES; cell.selectable = YES; cell.delegate = self;
+        cell = [[SpreadsheetCellTextField alloc] init]; cell.identifier = @"SpreadsheetCell"; cell.bordered = NO; cell.backgroundColor = SpreadsheetTheme.transparentBackground;
+        cell.lineBreakMode = NSLineBreakByTruncatingTail; cell.textColor = SpreadsheetTheme.primaryText; cell.editable = YES; cell.selectable = YES; cell.delegate = self;
     }
     [self configureCell:cell row:row column:column.identifier.integerValue includeValue:YES];
     return cell;
@@ -555,11 +582,14 @@ void writeUiSmokeSuccess()
     if (format.italic) traits |= NSItalicFontMask;
     if (traits) font = [[NSFontManager sharedFontManager] convertFont:font toHaveTrait:traits];
     cell.font = font;
+    cell.textColor = SpreadsheetTheme.primaryText;
     cell.alignment = format.alignment == HorizontalAlignment::Center ? NSTextAlignmentCenter : format.alignment == HorizontalAlignment::Right ? NSTextAlignmentRight : NSTextAlignmentLeft;
     NSMutableParagraphStyle *paragraphStyle = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
     paragraphStyle.alignment = cell.alignment;
     if (editing) {
         NSTextView *editor = static_cast<NSTextView *>(cell.currentEditor);
+        [self applyThemeToEditor:editor];
+        editor.backgroundColor = SpreadsheetTheme.worksheetBackground;
         editor.defaultParagraphStyle = paragraphStyle;
         NSMutableDictionary<NSAttributedStringKey, id> *typingAttributes = [editor.typingAttributes mutableCopy];
         typingAttributes[NSParagraphStyleAttributeName] = paragraphStyle;
@@ -570,6 +600,18 @@ void writeUiSmokeSuccess()
         if (format.underline) attributes[NSUnderlineStyleAttributeName] = @(NSUnderlineStyleSingle);
         cell.attributedStringValue = [[NSAttributedString alloc] initWithString:cell.stringValue attributes:attributes];
     }
+}
+
+- (void)applyThemeToEditor:(NSTextView *)editor
+{
+    if (!editor) return;
+    editor.backgroundColor = SpreadsheetTheme.formulaBarBackground;
+    editor.textColor = SpreadsheetTheme.primaryText;
+    editor.insertionPointColor = SpreadsheetTheme.activeCellBorder;
+    editor.selectedTextAttributes = @{
+        NSBackgroundColorAttributeName: SpreadsheetTheme.selectionFill,
+        NSForegroundColorAttributeName: SpreadsheetTheme.primaryText
+    };
 }
 
 - (id)tableView:(NSTableView *)tableView objectValueForTableColumn:(NSTableColumn *)column row:(NSInteger)row
@@ -598,12 +640,15 @@ void writeUiSmokeSuccess()
 {
     if ([notification.object isKindOfClass:SpreadsheetCellTextField.class]) {
         SpreadsheetCellTextField *cell = static_cast<SpreadsheetCellTextField *>(notification.object);
+        [self applyThemeToEditor:static_cast<NSTextView *>(cell.currentEditor)];
+        cell.currentEditor.backgroundColor = SpreadsheetTheme.worksheetBackground;
         const std::string raw = [self.workbookDocument workbook]->rawValue(static_cast<int>(cell.spreadsheetRow), static_cast<int>(cell.spreadsheetColumn));
         cell.stringValue = asNSString(raw);
         if ([cell.currentEditor isKindOfClass:NSTextView.class]) static_cast<NSTextView *>(cell.currentEditor).string = cell.stringValue;
         return;
     }
     if (notification.object == _formulaBar && !_formulaSession->isEditing()) {
+        [self applyThemeToEditor:static_cast<NSTextView *>(_formulaBar.currentEditor)];
         _formulaSession->begin({static_cast<int>(_activeRow), static_cast<int>(_activeColumn)}, [self.workbookDocument workbook]->rawValue(static_cast<int>(_activeRow), static_cast<int>(_activeColumn)));
     }
 }
