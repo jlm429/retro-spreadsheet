@@ -10,6 +10,8 @@
 #include <cstdlib>
 #include <memory>
 
+@class SpreadsheetWindowController;
+
 namespace {
 NSString *asNSString(const std::string &value) { return [NSString stringWithUTF8String:value.c_str()]; }
 std::string asString(NSString *value)
@@ -19,7 +21,22 @@ std::string asString(NSString *value)
 }
 void requireMainThread() { NSCAssert(NSThread.isMainThread, @"Workbook UI access must stay on the main thread."); }
 NSString *columnName(NSInteger column) { return [NSString stringWithFormat:@"%c", static_cast<int>('A' + column)]; }
-NSWindow *frontWindow() { return NSApp.keyWindow ? NSApp.keyWindow : NSApp.windows.firstObject; }
+NSWindow *frontWindow()
+{
+    for (NSWindow *window in NSApp.windows) {
+        if ([window.windowController isKindOfClass:NSClassFromString(@"SpreadsheetWindowController")]) return window;
+    }
+    return NSApp.keyWindow ? NSApp.keyWindow : NSApp.windows.firstObject;
+}
+NSImage *alignmentImage(NSString *name, NSString *accessibilityLabel)
+{
+    if (@available(macOS 11.0, *)) {
+        NSImage *image = [NSImage imageWithSystemSymbolName:name accessibilityDescription:accessibilityLabel];
+        image.size = NSMakeSize(14, 14);
+        return image;
+    }
+    return nil;
+}
 bool uiSmokeTestMode = false;
 bool uiEndToEndTestMode = false;
 bool uiSmokeTestFailed = false;
@@ -61,7 +78,6 @@ void writeUiSmokeSuccess()
 }
 
 @class WorkbookDocument;
-@class SpreadsheetWindowController;
 
 @interface SpreadsheetTableView : NSTableView
 @property(nonatomic, assign) SpreadsheetWindowController *spreadsheetController;
@@ -323,6 +339,7 @@ void writeUiSmokeSuccess()
 @property(nonatomic, strong) SpreadsheetRowHeaderView *rowHeaderView;
 @property(nonatomic, strong) NSScrollView *worksheetScroll;
 @property(nonatomic, strong) NSScrollView *rowHeaderScroll;
+@property(nonatomic, strong) NSTextField *formulaSymbolLabel;
 @property(nonatomic, strong) FormulaBarTextField *formulaBar;
 @property(nonatomic, strong) NSTextField *statusField;
 @property(nonatomic, strong) NSPopUpButton *fontFamilyControl;
@@ -381,32 +398,44 @@ void writeUiSmokeSuccess()
     _styleControl.segmentCount = 3; [_styleControl setLabel:@"B" forSegment:0]; [_styleControl setLabel:@"I" forSegment:1]; [_styleControl setLabel:@"U" forSegment:2];
     _styleControl.trackingMode = NSSegmentSwitchTrackingSelectAny; _styleControl.target = self; _styleControl.action = @selector(changeStyle:); _styleControl.segmentStyle = NSSegmentStyleSmallSquare; _styleControl.translatesAutoresizingMaskIntoConstraints = NO;
     _alignmentControl = [[RibbonSegmentedControl alloc] initWithFrame:NSZeroRect];
-    _alignmentControl.segmentCount = 3; [_alignmentControl setLabel:@"Left" forSegment:0]; [_alignmentControl setLabel:@"Center" forSegment:1]; [_alignmentControl setLabel:@"Right" forSegment:2];
+    _alignmentControl.segmentCount = 3;
+    const NSArray<NSString *> *alignmentSymbolNames = @[@"text.alignleft", @"text.aligncenter", @"text.alignright"];
+    const NSArray<NSString *> *alignmentLabels = @[@"Align Left", @"Align Center", @"Align Right"];
+    for (NSInteger segment = 0; segment < _alignmentControl.segmentCount; ++segment) {
+        [_alignmentControl setLabel:alignmentLabels[segment] forSegment:segment];
+        [_alignmentControl setImage:alignmentImage(alignmentSymbolNames[segment], alignmentLabels[segment]) forSegment:segment];
+        [_alignmentControl setImageScaling:NSImageScaleProportionallyDown forSegment:segment];
+        [_alignmentControl setWidth:28 forSegment:segment];
+        [_alignmentControl setToolTip:alignmentLabels[segment] forSegment:segment];
+    }
     _alignmentControl.trackingMode = NSSegmentSwitchTrackingSelectOne; _alignmentControl.target = self; _alignmentControl.action = @selector(changeAlignment:); _alignmentControl.segmentStyle = NSSegmentStyleSmallSquare; _alignmentControl.translatesAutoresizingMaskIntoConstraints = NO;
     _functionControl = [[RibbonPopUpButton alloc] init];
-    [_functionControl addItemsWithTitles:@[@"Functions", @"SUM", @"AVERAGE", @"MIN", @"MAX", @"COUNT"]];
+    [_functionControl addItemsWithTitles:@[@"∑", @"SUM", @"AVERAGE", @"MIN", @"MAX", @"COUNT"]];
+    _functionControl.accessibilityLabel = @"Functions";
     _functionControl.target = self; _functionControl.action = @selector(insertFunction:); _functionControl.translatesAutoresizingMaskIntoConstraints = NO;
     [ribbon addSubview:_fontFamilyControl]; [ribbon addSubview:_fontSizeControl]; [ribbon addSubview:_styleControl]; [ribbon addSubview:_alignmentControl]; [ribbon addSubview:_functionControl];
     [NSLayoutConstraint activateConstraints:@[
-        [ribbon.heightAnchor constraintEqualToConstant:34], [_fontFamilyControl.leadingAnchor constraintEqualToAnchor:ribbon.leadingAnchor constant:10], [_fontFamilyControl.centerYAnchor constraintEqualToAnchor:ribbon.centerYAnchor],
-        [_fontSizeControl.leadingAnchor constraintEqualToAnchor:_fontFamilyControl.trailingAnchor constant:6], [_fontSizeControl.centerYAnchor constraintEqualToAnchor:ribbon.centerYAnchor],
-        [_styleControl.leadingAnchor constraintEqualToAnchor:_fontSizeControl.trailingAnchor constant:10], [_styleControl.centerYAnchor constraintEqualToAnchor:ribbon.centerYAnchor],
-        [_alignmentControl.leadingAnchor constraintEqualToAnchor:_styleControl.trailingAnchor constant:10], [_alignmentControl.centerYAnchor constraintEqualToAnchor:ribbon.centerYAnchor],
-        [_functionControl.leadingAnchor constraintEqualToAnchor:_alignmentControl.trailingAnchor constant:10], [_functionControl.centerYAnchor constraintEqualToAnchor:ribbon.centerYAnchor]
+        [ribbon.heightAnchor constraintEqualToConstant:34], [_fontFamilyControl.leadingAnchor constraintEqualToAnchor:ribbon.leadingAnchor constant:10], [_fontFamilyControl.widthAnchor constraintEqualToConstant:128], [_fontFamilyControl.centerYAnchor constraintEqualToAnchor:ribbon.centerYAnchor],
+        [_fontSizeControl.leadingAnchor constraintEqualToAnchor:_fontFamilyControl.trailingAnchor constant:6], [_fontSizeControl.widthAnchor constraintEqualToConstant:54], [_fontSizeControl.centerYAnchor constraintEqualToAnchor:ribbon.centerYAnchor],
+        [_styleControl.leadingAnchor constraintEqualToAnchor:_fontSizeControl.trailingAnchor constant:8], [_styleControl.centerYAnchor constraintEqualToAnchor:ribbon.centerYAnchor],
+        [_alignmentControl.leadingAnchor constraintEqualToAnchor:_styleControl.trailingAnchor constant:8], [_alignmentControl.centerYAnchor constraintEqualToAnchor:ribbon.centerYAnchor],
+        [_functionControl.leadingAnchor constraintEqualToAnchor:_alignmentControl.trailingAnchor constant:8], [_functionControl.widthAnchor constraintEqualToConstant:50], [_functionControl.centerYAnchor constraintEqualToAnchor:ribbon.centerYAnchor]
     ]];
     [stack addArrangedSubview:ribbon];
 
     NSView *formulaRow = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 0, 38)];
-    NSTextField *fx = [NSTextField labelWithString:@"fx"];
-    fx.font = [NSFont boldSystemFontOfSize:14]; fx.alignment = NSTextAlignmentCenter; fx.translatesAutoresizingMaskIntoConstraints = NO;
+    _formulaSymbolLabel = [NSTextField labelWithString:@"ƒx"];
+    NSFont *formulaSymbolFont = [NSFont fontWithName:@"Times-Italic" size:16];
+    _formulaSymbolLabel.font = formulaSymbolFont ? formulaSymbolFont : [NSFont systemFontOfSize:16];
+    _formulaSymbolLabel.alignment = NSTextAlignmentCenter; _formulaSymbolLabel.editable = NO; _formulaSymbolLabel.selectable = NO; _formulaSymbolLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _formulaBar = [[FormulaBarTextField alloc] init];
     _formulaBar.spreadsheetController = self;
     _formulaBar.placeholderString = @"Enter a value or formula"; _formulaBar.delegate = self; _formulaBar.translatesAutoresizingMaskIntoConstraints = NO;
-    [formulaRow addSubview:fx]; [formulaRow addSubview:_formulaBar];
+    [formulaRow addSubview:_formulaSymbolLabel]; [formulaRow addSubview:_formulaBar];
     [NSLayoutConstraint activateConstraints:@[
-        [formulaRow.heightAnchor constraintEqualToConstant:38], [fx.leadingAnchor constraintEqualToAnchor:formulaRow.leadingAnchor constant:12],
-        [fx.widthAnchor constraintEqualToConstant:32], [fx.centerYAnchor constraintEqualToAnchor:formulaRow.centerYAnchor],
-        [_formulaBar.leadingAnchor constraintEqualToAnchor:fx.trailingAnchor constant:8], [_formulaBar.trailingAnchor constraintEqualToAnchor:formulaRow.trailingAnchor constant:-12],
+        [formulaRow.heightAnchor constraintEqualToConstant:38], [_formulaSymbolLabel.leadingAnchor constraintEqualToAnchor:formulaRow.leadingAnchor constant:12],
+        [_formulaSymbolLabel.widthAnchor constraintEqualToConstant:32], [_formulaSymbolLabel.centerYAnchor constraintEqualToAnchor:formulaRow.centerYAnchor],
+        [_formulaBar.leadingAnchor constraintEqualToAnchor:_formulaSymbolLabel.trailingAnchor constant:6], [_formulaBar.trailingAnchor constraintEqualToAnchor:formulaRow.trailingAnchor constant:-12],
         [_formulaBar.centerYAnchor constraintEqualToAnchor:formulaRow.centerYAnchor]
     ]];
     [stack addArrangedSubview:formulaRow];
@@ -926,8 +955,9 @@ void writeUiSmokeSuccess()
 - (IBAction)insertAverage:(id)sender { [self beginFunction:@"AVERAGE"]; }
 - (IBAction)insertFunction:(id)sender
 {
-    NSString *function = static_cast<NSPopUpButton *>(sender).titleOfSelectedItem;
-    if ([function isEqualToString:@"Functions"]) return;
+    NSPopUpButton *functionControl = static_cast<NSPopUpButton *>(sender);
+    if (functionControl.indexOfSelectedItem == 0) return;
+    NSString *function = functionControl.titleOfSelectedItem;
     if (!_formulaSession->isEditing()) [self beginFunction:function];
     else if (_formulaSession->insertFunction(asString(function), _formulaSession->draft().size())) {
         _formulaBar.stringValue = asNSString(_formulaSession->draft());
@@ -938,7 +968,7 @@ void writeUiSmokeSuccess()
             editor.selectedRange = NSMakeRange(_formulaBar.stringValue.length, 0);
         }
     }
-    [static_cast<NSPopUpButton *>(sender) selectItemAtIndex:0];
+    [functionControl selectItemAtIndex:0];
 }
 
 - (void)beginFunction:(NSString *)function
@@ -980,6 +1010,21 @@ void writeUiSmokeSuccess()
     NSTableColumn *firstColumn = _table.tableColumns[0];
     NSTableColumn *secondColumn = _table.tableColumns[1];
     NSTableColumn *thirdColumn = _table.tableColumns[2];
+
+    const NSArray<NSString *> *alignmentLabels = @[@"Align Left", @"Align Center", @"Align Right"];
+    for (NSInteger segment = 0; segment < _alignmentControl.segmentCount; ++segment) {
+        NSImage *image = [_alignmentControl imageForSegment:segment];
+        if (!require(image != nil && [image.accessibilityDescription isEqualToString:alignmentLabels[segment]]
+                && [_alignmentControl widthForSegment:segment] == 28,
+                @"The ribbon alignment controls did not retain their compact, accessible symbol presentation.")) return NO;
+    }
+    if (!require([_functionControl.accessibilityLabel isEqualToString:@"Functions"]
+            && [_functionControl.titleOfSelectedItem isEqualToString:@"∑"]
+            && _functionControl.itemArray.count == 6,
+            @"The compact function popup did not retain its accessible function menu.")) return NO;
+    if (!require([_formulaSymbolLabel.stringValue isEqualToString:@"ƒx"] && !_formulaSymbolLabel.editable
+            && !_formulaSymbolLabel.selectable && ![_formulaSymbolLabel acceptsFirstResponder],
+            @"The formula symbol label did not remain a noninteractive static label.")) return NO;
 
     [self.window setContentSize:NSMakeSize(1060, 420)];
     [self.window.contentView layoutSubtreeIfNeeded];
