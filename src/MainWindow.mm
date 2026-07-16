@@ -119,6 +119,7 @@ void writeUiSmokeSuccess()
 - (void)selectCellAtRow:(NSInteger)row column:(NSInteger)column;
 - (void)handleCellMouseDownAtRow:(NSInteger)row column:(NSInteger)column event:(NSEvent *)event;
 - (void)handleCellDragEvent:(NSEvent *)event;
+- (BOOL)handleWorksheetKeyDown:(NSEvent *)event;
 - (void)prepareCellForEditing:(SpreadsheetCellTextField *)cell;
 - (void)handleRowHeaderMouseDownAtRow:(NSInteger)row;
 - (void)handleColumnHeaderMouseDownAtColumn:(NSInteger)column;
@@ -139,7 +140,6 @@ void writeUiSmokeSuccess()
 - (void)cancelCellEditing:(SpreadsheetCellTextField *)cell;
 - (void)commitFormulaBarAdvancingColumn:(BOOL)advanceColumn;
 - (void)selectCellAfterTabFromRow:(NSInteger)row column:(NSInteger)column;
-- (void)beginEditingCellAtRow:(NSInteger)row column:(NSInteger)column;
 @end
 
 @implementation SpreadsheetTableView
@@ -158,6 +158,12 @@ void writeUiSmokeSuccess()
 {
     [self.spreadsheetController handleCellDragEvent:event];
     [super mouseDragged:event];
+}
+
+- (void)keyDown:(NSEvent *)event
+{
+    if ([self.spreadsheetController handleWorksheetKeyDown:event]) return;
+    [super keyDown:event];
 }
 @end
 
@@ -652,7 +658,6 @@ void writeUiSmokeSuccess()
     else [self selectCellAtRow:row column:column];
     [_table reloadData];
     [self updateFormulaBar];
-    if (advanceColumn) [self beginEditingCellAtRow:_activeRow column:_activeColumn];
 }
 
 - (void)cancelCellEditing:(SpreadsheetCellTextField *)cell
@@ -699,6 +704,25 @@ void writeUiSmokeSuccess()
     if (column < Workbook::ColumnCount - 1) [self selectCellAtRow:row column:column + 1];
     else if (row < Workbook::RowCount - 1) [self selectCellAtRow:row + 1 column:0];
     else [self selectCellAtRow:row column:column];
+}
+
+- (BOOL)handleWorksheetKeyDown:(NSEvent *)event
+{
+    if (_formulaSession->isEditing() || _activeRow < 0 || _activeColumn < 0) return NO;
+    if ([event.characters isEqualToString:@"\t"]) {
+        [self selectCellAfterTabFromRow:_activeRow column:_activeColumn];
+        return YES;
+    }
+    if (event.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagControl)) return NO;
+    if (event.characters.length != 1 || [event.characters characterAtIndex:0] < 0x20) return NO;
+    [_table scrollRowToVisible:_activeRow];
+    [_table scrollColumnToVisible:_activeColumn];
+    [_table editColumn:_activeColumn row:_activeRow withEvent:nil select:YES];
+    SpreadsheetCellTextField *cell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:_activeColumn row:_activeRow makeIfNecessary:NO]);
+    NSTextView *editor = static_cast<NSTextView *>(cell.currentEditor);
+    if (!editor) return NO;
+    [editor interpretKeyEvents:@[event]];
+    return YES;
 }
 
 - (void)handleCellMouseDownAtRow:(NSInteger)row column:(NSInteger)column event:(NSEvent *)event
@@ -809,18 +833,6 @@ void writeUiSmokeSuccess()
         [self updateFormulaBar];
     }
     if (advanceColumn) [self selectCellAfterTabFromRow:destination.row column:destination.column];
-    if (advanceColumn) [self beginEditingCellAtRow:_activeRow column:_activeColumn];
-}
-
-- (void)beginEditingCellAtRow:(NSInteger)row column:(NSInteger)column
-{
-    [_table scrollRowToVisible:row];
-    [_table scrollColumnToVisible:column];
-    [_table layoutSubtreeIfNeeded];
-    [_table editColumn:column row:row withEvent:nil select:YES];
-    SpreadsheetCellTextField *cell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:column row:row makeIfNecessary:NO]);
-    NSTextView *editor = static_cast<NSTextView *>(cell.currentEditor);
-    if (editor) [self.window makeFirstResponder:editor];
 }
 
 - (void)cancelFormulaBar
@@ -1125,26 +1137,80 @@ void writeUiSmokeSuccess()
             && [_formulaBar.stringValue isEqualToString:@"typed then returned"],
             @"Center after Return did not immediately update the displayed paragraph without changing selection or content.")) return NO;
 
-    // Tab through the actual shared field editor so the key-view chain cannot
-    // redirect a formula cell through the formula bar before grid navigation.
-    [self tableView:_table setObjectValue:@"=SUM(A1,B1)" forTableColumn:thirdColumn row:7];
-    [self selectCellAtRow:7 column:2];
-    [_table reloadData]; [_table layoutSubtreeIfNeeded];
-    SpreadsheetCellTextField *tabFormulaCell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:2 row:7 makeIfNecessary:YES]);
-    [tabFormulaCell selectText:nil];
-    NSTextView *tabFormulaEditor = static_cast<NSTextView *>(tabFormulaCell.currentEditor);
-    if (!require(tabFormulaEditor != nil && self.window.firstResponder == tabFormulaEditor,
-            @"The formula Tab regression scenario did not begin grid editing.")) return NO;
-    NSEvent *tabEvent = [NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint modifierFlags:0 timestamp:0
-        windowNumber:self.window.windowNumber context:nil characters:@"\t" charactersIgnoringModifiers:@"\t" isARepeat:NO keyCode:48];
-    [tabFormulaEditor keyDown:tabEvent];
-    SpreadsheetCellTextField *tabDestinationCell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:3 row:7 makeIfNecessary:NO]);
-    NSTextView *tabDestinationEditor = static_cast<NSTextView *>(tabDestinationCell.currentEditor);
-    if (!require(workbook->rawValue(7, 2) == "=SUM(A1,B1)" && _activeRow == 7 && _activeColumn == 3
-            && tabDestinationEditor != nil && self.window.firstResponder == tabDestinationEditor
-            && self.window.firstResponder != _formulaBar && self.window.firstResponder != _formulaBar.currentEditor,
-            @"Tab from a formula cell focused the formula bar instead of the next grid editor.")) return NO;
-    [self cancelCellEditing:tabDestinationCell];
+    // Tab ends the shared field-editor session and leaves keyboard ownership
+    // with the worksheet. Repeat the sequence through formula and value cells,
+    // and verify that the first typed character begins editing the new cell.
+    const auto keyEvent = ^NSEvent *(NSString *characters, unsigned short keyCode) {
+        return [NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint modifierFlags:0 timestamp:0
+            windowNumber:self.window.windowNumber context:nil characters:characters charactersIgnoringModifiers:characters isARepeat:NO keyCode:keyCode];
+    };
+    const auto beginEditor = ^NSTextView *(NSInteger row, NSInteger column) {
+        SpreadsheetCellTextField *cell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:column row:row makeIfNecessary:YES]);
+        [cell selectText:nil];
+        return static_cast<NSTextView *>(cell.currentEditor);
+    };
+    const auto cancelEditor = ^void(NSInteger row, NSInteger column) {
+        SpreadsheetCellTextField *cell = static_cast<SpreadsheetCellTextField *>([_table viewAtColumn:column row:row makeIfNecessary:NO]);
+        [self cancelCellEditing:cell];
+    };
+    const NSInteger tabRow = 12;
+    [self tableView:_table setObjectValue:@"=SUM(A1,B1)" forTableColumn:firstColumn row:tabRow];
+    [self tableView:_table setObjectValue:@"=SUM(A1,B1)" forTableColumn:secondColumn row:tabRow];
+    [self selectCellAtRow:tabRow column:0]; [_table reloadData]; [_table layoutSubtreeIfNeeded];
+    NSTextView *tabEditor = beginEditor(tabRow, 0);
+    if (!require(tabEditor != nil && self.window.firstResponder == tabEditor, @"The repeated formula Tab scenario did not begin grid editing.")) return NO;
+    [tabEditor keyDown:keyEvent(@"\t", 48)];
+    if (!require(workbook->rawValue(tabRow, 0) == "=SUM(A1,B1)" && workbook->displayValue(tabRow, 0) == "5" && _activeRow == tabRow && _activeColumn == 1
+            && self.window.firstResponder == _table && self.window.firstResponder != _formulaBar
+            && [_formulaBar.stringValue isEqualToString:@"=SUM(A1,B1)"],
+            @"Formula Tab did not preserve worksheet ownership and raw formula-bar contents.")) return NO;
+    [_table keyDown:keyEvent(@"q", 12)];
+    if (!require(self.window.firstResponder != _formulaBar && self.window.firstResponder != _table
+            && [static_cast<NSTextView *>(self.window.firstResponder).string isEqualToString:@"q"],
+            @"Typing after Formula Tab did not edit the newly active cell.")) return NO;
+    cancelEditor(tabRow, 1);
+    tabEditor = beginEditor(tabRow, 1);
+    [tabEditor keyDown:keyEvent(@"\t", 48)];
+    if (!require(workbook->rawValue(tabRow, 1) == "=SUM(A1,B1)" && workbook->displayValue(tabRow, 1) == "5" && _activeRow == tabRow && _activeColumn == 2
+            && self.window.firstResponder == _table && [_formulaBar.stringValue length] == 0,
+            @"Repeated Formula Tab did not advance once while retaining worksheet ownership.")) return NO;
+    [_table keyDown:keyEvent(@"r", 15)];
+    if (!require(self.window.firstResponder != _formulaBar && self.window.firstResponder != _table
+            && [static_cast<NSTextView *>(self.window.firstResponder).string isEqualToString:@"r"],
+            @"Typing after repeated Formula Tab did not edit the newly active cell.")) return NO;
+    cancelEditor(tabRow, 2);
+
+    [self tableView:_table setObjectValue:@"first value" forTableColumn:firstColumn row:13];
+    [self tableView:_table setObjectValue:@"second value" forTableColumn:secondColumn row:13];
+    [self selectCellAtRow:13 column:0]; [_table reloadData]; [_table layoutSubtreeIfNeeded];
+    tabEditor = beginEditor(13, 0);
+    [tabEditor keyDown:keyEvent(@"\t", 48)];
+    if (!require(workbook->rawValue(13, 0) == "first value" && _activeRow == 13 && _activeColumn == 1 && self.window.firstResponder == _table,
+            @"Value Tab did not advance once while retaining worksheet ownership.")) return NO;
+    [_table keyDown:keyEvent(@"s", 1)];
+    if (!require([static_cast<NSTextView *>(self.window.firstResponder).string isEqualToString:@"s"],
+            @"Typing after Value Tab did not edit the newly active cell.")) return NO;
+    cancelEditor(13, 1);
+    tabEditor = beginEditor(13, 1);
+    [tabEditor keyDown:keyEvent(@"\t", 48)];
+    if (!require(workbook->rawValue(13, 1) == "second value" && _activeRow == 13 && _activeColumn == 2 && self.window.firstResponder == _table,
+            @"Repeated Value Tab did not advance once while retaining worksheet ownership.")) return NO;
+    [_table keyDown:keyEvent(@"t", 17)];
+    if (!require([static_cast<NSTextView *>(self.window.firstResponder).string isEqualToString:@"t"],
+            @"Typing after repeated Value Tab did not edit the newly active cell.")) return NO;
+    cancelEditor(13, 2);
+
+    [self tableView:_table setObjectValue:@"=SUM(A1,B1)" forTableColumn:_table.tableColumns.lastObject row:14];
+    [self selectCellAtRow:14 column:Workbook::ColumnCount - 1]; [_table reloadData]; [_table layoutSubtreeIfNeeded];
+    tabEditor = beginEditor(14, Workbook::ColumnCount - 1);
+    [tabEditor keyDown:keyEvent(@"\t", 48)];
+    if (!require(workbook->rawValue(14, Workbook::ColumnCount - 1) == "=SUM(A1,B1)" && _activeRow == 15 && _activeColumn == 0
+            && self.window.firstResponder == _table && [_formulaBar.stringValue length] == 0,
+            @"Final-column Formula Tab did not wrap while retaining worksheet ownership.")) return NO;
+    [_table keyDown:keyEvent(@"w", 13)];
+    if (!require([static_cast<NSTextView *>(self.window.firstResponder).string isEqualToString:@"w"],
+            @"Typing after a final-column Tab did not edit the wrapped cell.")) return NO;
+    cancelEditor(15, 0);
 
     [self tableView:_table setObjectValue:@"=SUM(A1,B1)" forTableColumn:thirdColumn row:5];
     [self selectCellAtRow:5 column:2];
