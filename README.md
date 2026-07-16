@@ -1,7 +1,7 @@
 # Retro Spreadsheet
 
 <p align="center">
-  <img src="docs/images/retro-spreadsheet.png" width="900" alt="Retro Spreadsheet">
+  <img src="docs/images/retro-spreadsheet-image.png" width="900" alt="Retro Spreadsheet">
 </p>
 
 <p align="center">
